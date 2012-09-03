@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<classpath>
+	<classpathentry kind="src" path="src"/>
+	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
+	<classpathentry kind="lib" path="/home/rhs/datanucleus-accessplatform-rdbms-3.0.6/lib/datanucleus-rdbms-3.0.6.jar"/>
+	<classpathentry kind="lib" path="/home/rhs/datanucleus-accessplatform-rdbms-3.0.6/lib/datanucleus-api-jdo-3.0.5.jar"/>
+	<classpathentry kind="lib" path="/home/rhs/datanucleus-accessplatform-rdbms-3.0.6/lib/datanucleus-core-3.0.6.jar"/>
+	<classpathentry kind="lib" path="/home/rhs/datanucleus-accessplatform-rdbms-3.0.6/lib/datanucleus-enhancer-3.0.1.jar"/>
+	<classpathentry kind="lib" path="/home/rhs/datanucleus-accessplatform-rdbms-3.0.6/deps/asm-3.3.jar"/>
+	<classpathentry kind="lib" path="/home/rhs/datanucleus-accessplatform-rdbms-3.0.6/deps/jdo-api-3.1-SNAPSHOT-20110926.jar"/>
+	<classpathentry kind="lib" path="lib/commons-cli-1.2.jar"/>
+	<classpathentry kind="lib" path="lib/log4j-1.2.13.jar"/>
+	<classpathentry kind="lib" path="lib/mysql-connector-java-3.1.13-bin.jar"/>
+	<classpathentry kind="lib" path="lib/netcdfAll-4.2.jar"/>
+	<classpathentry kind="lib" path="lib/joda-convert-1.2.jar"/>
+	<classpathentry kind="lib" path="lib/joda-time-2.1.jar"/>
+	<classpathentry kind="output" path="bin"/>
+</classpath>
