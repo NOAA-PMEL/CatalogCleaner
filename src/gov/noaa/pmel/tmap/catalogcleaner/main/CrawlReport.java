@@ -16,6 +16,7 @@ import gov.noaa.pmel.tmap.catalogcleaner.jdo.Catalog;
 import gov.noaa.pmel.tmap.catalogcleaner.jdo.CatalogReference;
 import gov.noaa.pmel.tmap.catalogcleaner.jdo.LeafNodeReference;
 import gov.noaa.pmel.tmap.catalogcleaner.jdo.PersistenceHelper;
+import gov.noaa.pmel.tmap.catalogcleaner.jdo.LeafNodeReference.DataCrawlStatus;
 import gov.noaa.pmel.tmap.cleaner.cli.CrawlerOptions;
 
 import org.apache.commons.cli.CommandLine;
@@ -27,7 +28,7 @@ import org.datanucleus.api.jdo.JDOPersistenceManagerFactory;
 
 import sun.security.action.GetLongAction;
 
-public class TreeCrawlReport {
+public class CrawlReport {
      private static String root;
     private static PersistenceHelper helper;
     /**
@@ -66,10 +67,23 @@ public class TreeCrawlReport {
             int count = 0;
             int level = 1;
             if ( leaves != null ) {
-                System.out.println("Root has "+leaves.size()+" OPeNDAP datasets.");
+                int scanned = 0;
+                int notscanned = 0;
+                int failed = 0;
+                for ( Iterator leafIt = leaves.iterator(); leafIt.hasNext(); ) {
+                    LeafNodeReference leafNodeReference = (LeafNodeReference) leafIt.next();
+                    if ( leafNodeReference.getDataCrawlStatus() == DataCrawlStatus.FAILED) {
+                        failed++;
+                    } else if ( leafNodeReference.getDataCrawlStatus() == DataCrawlStatus.NOT_STARTED ) {
+                        notscanned++;
+                    } else if ( leafNodeReference.getDataCrawlStatus() == DataCrawlStatus.FINISHED) {
+                        scanned++;
+                    }
+                }
+                System.out.println("Root has "+leaves.size()+" OPeNDAP datasets with "+scanned+" finished "+notscanned+" not started and "+failed+" failed.");
                 count = count + leaves.size();
             }
-            count = count + report(count, level, catalog.getCatalogRefs());
+            count = count + report(count, level, catalog.getUrl(), catalog.getCatalogRefs());
             System.out.println("Total leaf data sets = "+count);
         } catch ( ParseException e ) {
             System.err.println( e.getMessage() );
@@ -85,20 +99,33 @@ public class TreeCrawlReport {
             e.printStackTrace();
         }
     }
-    private static int report(int total, int level, List<CatalogReference> refs) {
+    private static int report(int total, int level, String parent, List<CatalogReference> refs) {
         for ( Iterator iterator = refs.iterator(); iterator.hasNext(); ) {
             CatalogReference catalogReference = (CatalogReference) iterator.next();
-            Catalog sub = helper.getCatalog(root, catalogReference.getUrl());
+            Catalog sub = helper.getCatalog(parent, catalogReference.getUrl());
             List<LeafNodeReference> leaves = sub.getLeafNodes();
+            int failed = 0;
+            int notscanned = 0;
+            int scanned = 0;
+            for ( Iterator leafIt = leaves.iterator(); leafIt.hasNext(); ) {
+                LeafNodeReference leafNodeReference = (LeafNodeReference) leafIt.next();
+                if ( leafNodeReference.getDataCrawlStatus() == DataCrawlStatus.FAILED) {
+                    failed++;
+                } else if ( leafNodeReference.getDataCrawlStatus() == DataCrawlStatus.NOT_STARTED ) {
+                    notscanned++;
+                } else if ( leafNodeReference.getDataCrawlStatus() == DataCrawlStatus.FINISHED) {
+                    scanned++;
+                }
+            }
             if ( leaves != null && leaves.size() > 0 ) {
                 String blanks = "";
                 for ( int i = 0; i < level;  i++ ) {
                     blanks = blanks + "  ";
                 }
-                System.out.println(blanks+sub.getUrl()+" has "+leaves.size()+" OPeNDAP datasets");
+                System.out.println(blanks+sub.getUrl()+" has "+leaves.size()+" OPeNDAP datasets with "+scanned+" finished "+notscanned+" not started and "+failed+" failed.");
                 total = total + leaves.size();
             }
-            total = report(total, level, sub.getCatalogRefs());
+            total = report(total, level, sub.getUrl(), sub.getCatalogRefs());
         }
         level++;
         return total;

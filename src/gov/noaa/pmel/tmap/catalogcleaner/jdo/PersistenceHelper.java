@@ -14,53 +14,54 @@ public class PersistenceHelper {
     }
     public Catalog getCatalog(String parent, String url) {
         Catalog catalog = null;
-        Transaction tx = persistenceManager.currentTransaction();
         try {  
-            tx.begin();
             Query query = persistenceManager.newQuery("javax.jdo.query.SQL", "SELECT * FROM catalog WHERE url='" + url + "' AND parent='"+parent+"'");
             query.setClass(Catalog.class);
             @SuppressWarnings("unchecked")
             List<Catalog> results = (List<Catalog>) query.execute();
             catalog = results.get(0);
-            tx.commit();
-        } catch ( Exception e ) {
-            // S'ok, we'll take the null value.
-        } finally {
-            if ( tx.isActive() ) {
-                tx.rollback();
-            }
+        } catch (Exception e) {
+            // S'ok, we'll take the null and carry on.
         }
         return catalog;
+    }
+    public LeafDataset getLeafDataset(String parent, String url) {
+        LeafDataset leaf = null;
+        try {
+            Query query = persistenceManager.newQuery("javax.jdo.query.SQL", "SELECT * from leafdataset WHERE url='"+url+"' AND parent='"+"'");
+            query.setClass(LeafDataset.class);
+            List<LeafDataset> results = (List<LeafDataset>) query.execute();
+            leaf = results.get(0);
+        } catch ( Exception e ) {
+            // S'ok, we'll take the null and carry on.
+
+        } 
+        return leaf;
     }
     public CatalogXML getCatalogXML(String url) {
         CatalogXML catalogXML = null;
         try {
-            catalogXML = persistenceManager.getObjectById(CatalogXML.class, url);
+            Query query = persistenceManager.newQuery("javax.jdo.query.SQL", "SELECT * from catalogxml WHERE url='"+url+"' AND parent='"+"'");
+            query.setClass(CatalogXML.class);
+            List<CatalogXML> results = (List<CatalogXML>) query.execute();
+            catalogXML = results.get(0);
         } catch (Exception e) {
             // S'ok, we'll take the null value.
         }
         return catalogXML;
     }
     public void save(Object object) throws Exception {
-        Transaction transaction = persistenceManager.currentTransaction();
         try {
-            transaction.begin();
             persistenceManager.makePersistent(object);
-            transaction.commit();
-            persistenceManager.flush();
         }
         catch(Exception e){
            throw e;
         }
-        finally
-        {
-            if (transaction.isActive())
-            {
-                transaction.rollback();
-            }
-        }
     }
     public void close() {
        persistenceManager.close();
+    }
+    public Transaction getTransaction() {
+        return persistenceManager.currentTransaction();
     }
 }

@@ -11,9 +11,12 @@ public class ClassList extends HashSet<String> {
 
     public ClassList() {
         add("gov.noaa.pmel.tmap.catalogcleaner.jdo.Catalog");
+        add("gov.noaa.pmel.tmap.catalogcleaner.jdo.CatalogComment");
         add("gov.noaa.pmel.tmap.catalogcleaner.jdo.CatalogReference");
         add("gov.noaa.pmel.tmap.catalogcleaner.jdo.CatalogXML");
-
+        add("gov.noaa.pmel.tmap.catalogcleaner.jdo.LeafDataset");
+        add("gov.noaa.pmel.tmap.catalogcleaner.jdo.LeafNodeReference");
+        add("gov.noaa.pmel.tmap.catalogcleaner.jdo.NetCDFVariable");
     }
 
 }

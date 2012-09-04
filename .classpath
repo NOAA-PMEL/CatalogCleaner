@@ -14,5 +14,6 @@
 	<classpathentry kind="lib" path="lib/netcdfAll-4.2.jar"/>
 	<classpathentry kind="lib" path="lib/joda-convert-1.2.jar"/>
 	<classpathentry kind="lib" path="lib/joda-time-2.1.jar"/>
+	<classpathentry combineaccessrules="false" kind="src" path="/baker"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>

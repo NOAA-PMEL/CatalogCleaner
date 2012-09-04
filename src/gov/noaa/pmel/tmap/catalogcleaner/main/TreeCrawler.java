@@ -175,7 +175,7 @@ public class TreeCrawler {
                 String childURL = catalogReference.getUrl();
                 Catalog childCatalog = helper.getCatalog(root, childURL);
                 CatalogXML childCatalogXML = helper.getCatalogXML(childURL);
-                TreeCrawl crawl = new TreeCrawl(childCatalog, childCatalogXML, root, childURL);
+                TreeCrawl crawl = new TreeCrawl(childCatalog, childCatalogXML, catalog.getUrl(), childURL);
                 Future<TreeCrawlResult> futureChild = pool.submit(crawl);
                 futureChildren.add(futureChild);
             }

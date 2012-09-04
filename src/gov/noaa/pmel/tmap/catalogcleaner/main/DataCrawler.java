@@ -22,6 +22,7 @@ import java.util.concurrent.Future;
 
 import javax.jdo.JDOHelper;
 import javax.jdo.PersistenceManager;
+import javax.jdo.Transaction;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -37,6 +38,7 @@ public class DataCrawler {
     private static PersistenceHelper helper; 
     private static String root;
     private static List<Future<String>> futures;
+    private static Properties properties;
     /**
      * @param args
      */
@@ -59,7 +61,7 @@ public class DataCrawler {
                 // S'ok.  Use the default.
             }
             pool = Executors.newFixedThreadPool(threads);
-            Properties properties = new Properties() ;
+            properties = new Properties();
             URL propertiesURL =  ClassLoader.getSystemResource("datanucleus.properties");
             try {
                 properties.load(new FileInputStream(new File(propertiesURL.getFile())));
@@ -78,16 +80,21 @@ public class DataCrawler {
                 properties.setProperty("datanucleus.ConnectionURL", connectionURL);
                 JDOPersistenceManagerFactory pmf = (JDOPersistenceManagerFactory) JDOHelper.getPersistenceManagerFactory(properties);
                 PersistenceManager persistenceManager = pmf.getPersistenceManager();
+                System.out.println("We are using mulitple threads. "+persistenceManager.getMultithreaded());
                 helper = new PersistenceHelper(persistenceManager);
+                Transaction tx = helper.getTransaction();
+                tx.begin();
                 Catalog rootCatalog = helper.getCatalog(root, root);
-                DataCrawl dataCrawl = new DataCrawl(rootCatalog);
+                DataCrawl dataCrawl = new DataCrawl(properties, root, root);
                 futures = new ArrayList<Future<String>>();
                 Future<String> future = pool.submit(dataCrawl);
                 futures.add(future);
-                processReferences(rootCatalog.getCatalogRefs());
+                processReferences(root, rootCatalog.getCatalogRefs());
+                tx.commit();
                 for ( Iterator futuresIt = futures.iterator(); futuresIt.hasNext(); ) {
-                    Future<Boolean> f = (Future<Boolean>) futuresIt.next();
-                    System.out.println("Finished with "+f.get());
+                    Future<String> f = (Future<String>) futuresIt.next();
+                    String cat = f.get();
+                    System.out.println("Finished with "+cat);
                 }
                 helper.close();
                 shutdown(0);
@@ -100,6 +107,9 @@ public class DataCrawler {
             } catch ( ExecutionException e ) {
                 shutdown(-1);
                 e.printStackTrace();
+            } catch ( Exception e ) {
+                shutdown(-1);
+                e.printStackTrace();
             }
         } catch ( ParseException e ) {
             System.err.println( e.getMessage() );
@@ -109,16 +119,16 @@ public class DataCrawler {
             System.exit(-1);
         }
     }
-    public static void processReferences(List<CatalogReference> refs) {
+    public static void processReferences(String parent, List<CatalogReference> refs) {
         try {
         for ( Iterator refsIt = refs.iterator(); refsIt.hasNext(); ) {
             CatalogReference catalogReference = (CatalogReference) refsIt.next();
-            Catalog sub = helper.getCatalog(root, catalogReference.getUrl());
+            Catalog sub = helper.getCatalog(parent, catalogReference.getUrl());
             if ( sub != null ) {
-                DataCrawl dataCrawl = new DataCrawl(sub);
+                DataCrawl dataCrawl = new DataCrawl(properties, sub.getParent(), sub.getUrl());
                 Future<String> future = pool.submit(dataCrawl);
                 futures.add(future);
-                processReferences(sub.getCatalogRefs());
+                processReferences(sub.getUrl(), sub.getCatalogRefs());
             } else {
                 System.err.println("CatalogRefernce db reference was null for "+catalogReference.getUrl());
             }

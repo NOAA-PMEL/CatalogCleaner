@@ -12,9 +12,22 @@ public class LeafNodeReference {
     @Column(length=500)
     private String url;
     
+    @Persistent
+    DataCrawlStatus dataCrawlStatus;
+    
+    @Persistent
+    String crawlDate;
+    
+    public enum DataCrawlStatus {
+        NOT_STARTED,
+        FINISHED,
+        FAILED
+    }
+
     public LeafNodeReference(String url) {
         super();
         this.url = url;
+        this.dataCrawlStatus = DataCrawlStatus.NOT_STARTED;
     }
 
     public String getUrl() {
@@ -25,6 +38,23 @@ public class LeafNodeReference {
         this.url = url;
     }
     
+    public String getCrawlDate() {
+        return crawlDate;
+    }
+
+    public void setCrawlDate(String crawlDate) {
+        this.crawlDate = crawlDate;
+    }
+    
+
+    public DataCrawlStatus getDataCrawlStatus() {
+        return dataCrawlStatus;
+    }
+
+    public void setDataCrawlStatus(DataCrawlStatus dataCrawlStatus) {
+        this.dataCrawlStatus = dataCrawlStatus;
+    }
+
     @Override
     public String toString() {
         return url;
