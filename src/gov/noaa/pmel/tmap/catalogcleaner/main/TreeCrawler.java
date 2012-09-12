@@ -1,6 +1,14 @@
 package gov.noaa.pmel.tmap.catalogcleaner.main;
 
-import java.io.ByteArrayOutputStream;
+import gov.noaa.pmel.tmap.catalogcleaner.crawler.TreeCrawl;
+import gov.noaa.pmel.tmap.catalogcleaner.crawler.TreeCrawlResult;
+import gov.noaa.pmel.tmap.catalogcleaner.jdo.Catalog;
+import gov.noaa.pmel.tmap.catalogcleaner.jdo.CatalogReference;
+import gov.noaa.pmel.tmap.catalogcleaner.jdo.CatalogXML;
+import gov.noaa.pmel.tmap.catalogcleaner.jdo.ClassList;
+import gov.noaa.pmel.tmap.catalogcleaner.jdo.PersistenceHelper;
+import gov.noaa.pmel.tmap.cleaner.cli.CrawlerOptions;
+
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -21,18 +29,7 @@ import java.util.regex.Pattern;
 
 import javax.jdo.JDOHelper;
 import javax.jdo.PersistenceManager;
-
-import gov.noaa.pmel.tmap.catalogcleaner.crawler.TreeCrawl;
-import gov.noaa.pmel.tmap.catalogcleaner.crawler.TreeCrawlResult;
-import gov.noaa.pmel.tmap.catalogcleaner.jdo.Catalog;
-import gov.noaa.pmel.tmap.catalogcleaner.jdo.CatalogReference;
-import gov.noaa.pmel.tmap.catalogcleaner.jdo.CatalogXML;
-import gov.noaa.pmel.tmap.catalogcleaner.jdo.ClassList;
-import gov.noaa.pmel.tmap.catalogcleaner.jdo.PersistenceHelper;
-import gov.noaa.pmel.tmap.catalogcleaner.util.Util;
-import gov.noaa.pmel.tmap.cleaner.cli.CrawlerOptions;
-import gov.noaa.pmel.tmap.cleaner.http.Proxy;
-import gov.noaa.pmel.tmap.cleaner.xml.JDOMUtils;
+import javax.jdo.Transaction;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -42,9 +39,6 @@ import org.apache.commons.cli.ParseException;
 import org.datanucleus.NucleusContext;
 import org.datanucleus.api.jdo.JDOPersistenceManagerFactory;
 import org.datanucleus.store.schema.SchemaAwareStoreManager;
-import org.jdom.Document;
-import org.jdom.Element;
-import org.jdom.Namespace;
 import org.joda.time.DateTime;
 
 public class TreeCrawler {
@@ -52,6 +46,7 @@ public class TreeCrawler {
     private static ExecutorService pool;
     private static PersistenceHelper helper; 
     private static String root;
+    private static Properties properties;
     /**
      * @param args
      */
@@ -74,7 +69,7 @@ public class TreeCrawler {
                 // S'ok.  Use the default.
             }
             pool = Executors.newFixedThreadPool(threads);
-            Properties properties = new Properties() ;
+            properties = new Properties();
             URL propertiesURL =  ClassLoader.getSystemResource("datanucleus.properties");
             try {
                 properties.load(new FileInputStream(new File(propertiesURL.getFile())));
@@ -107,9 +102,7 @@ public class TreeCrawler {
                 ((SchemaAwareStoreManager)ctx.getStoreManager()).createSchema(classNames, properties);
                 PersistenceManager persistenceManager = pmf.getPersistenceManager();
                 helper = new PersistenceHelper(persistenceManager);
-                Catalog rootCatalog = helper.getCatalog(root, root);
-                CatalogXML rootXML = helper.getCatalogXML(root);
-                TreeCrawl crawl = new TreeCrawl(rootCatalog, rootXML, root, root);
+                TreeCrawl crawl = new TreeCrawl(properties, root, root);
                 List<Future> futures = new ArrayList<Future>();
                 Future future = pool.submit(crawl);
                 futures.add(future);
@@ -155,31 +148,28 @@ public class TreeCrawler {
         for ( Iterator futureIt = futures.iterator(); futureIt.hasNext(); ) {
             Future<TreeCrawlResult> future = (Future<TreeCrawlResult>) futureIt.next();
             TreeCrawlResult result = future.get();
-            CatalogXML xml = result.getCatalogXML();
-            helper.save(xml);
-            Catalog catalog = result.getCatalog();
-            helper.save(catalog);
-            List<CatalogReference> refs = catalog.getCatalogRefs();
-            List<CatalogReference> remove = new ArrayList();
-            for ( Iterator refsIt = refs.iterator(); refsIt.hasNext(); ) {
-                CatalogReference ref = (CatalogReference) refsIt.next();
-                for ( int i = 0; i < exclude.length; i++ ) {
-                    if ( Pattern.matches(exclude[i], ref.getUrl())) {
-                        remove.add(ref);
+            Catalog catalog = helper.getCatalog(result.getParent(), result.getUrl());
+            if ( !catalog.hasBestTimeSeries() ) {
+                List<CatalogReference> refs = catalog.getCatalogRefs();
+                List<CatalogReference> remove = new ArrayList();
+                for ( Iterator refsIt = refs.iterator(); refsIt.hasNext(); ) {
+                    CatalogReference ref = (CatalogReference) refsIt.next();
+                    for ( int i = 0; i < exclude.length; i++ ) {
+                        if ( Pattern.matches(exclude[i], ref.getUrl())) {
+                            remove.add(ref);
+                        }
                     }
                 }
+                refs.removeAll(remove);
+                for ( Iterator refsIt = refs.iterator(); refsIt.hasNext(); ) {
+                    CatalogReference catalogReference = (CatalogReference) refsIt.next();
+                    String childURL = catalogReference.getUrl();
+                    TreeCrawl crawl = new TreeCrawl(properties, catalog.getUrl(), childURL);
+                    Future<TreeCrawlResult> futureChild = pool.submit(crawl);
+                    futureChildren.add(futureChild);
+                }
+                saveAndProcessChildren(futureChildren);
             }
-            refs.removeAll(remove);
-            for ( Iterator refsIt = refs.iterator(); refsIt.hasNext(); ) {
-                CatalogReference catalogReference = (CatalogReference) refsIt.next();
-                String childURL = catalogReference.getUrl();
-                Catalog childCatalog = helper.getCatalog(root, childURL);
-                CatalogXML childCatalogXML = helper.getCatalogXML(childURL);
-                TreeCrawl crawl = new TreeCrawl(childCatalog, childCatalogXML, catalog.getUrl(), childURL);
-                Future<TreeCrawlResult> futureChild = pool.submit(crawl);
-                futureChildren.add(futureChild);
-            }
-            saveAndProcessChildren(futureChildren);
         }
        
         

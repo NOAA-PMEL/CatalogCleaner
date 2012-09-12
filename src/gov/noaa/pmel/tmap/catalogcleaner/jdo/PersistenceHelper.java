@@ -28,7 +28,7 @@ public class PersistenceHelper {
     public LeafDataset getLeafDataset(String parent, String url) {
         LeafDataset leaf = null;
         try {
-            Query query = persistenceManager.newQuery("javax.jdo.query.SQL", "SELECT * from leafdataset WHERE url='"+url+"' AND parent='"+"'");
+            Query query = persistenceManager.newQuery("javax.jdo.query.SQL", "SELECT * from leafdataset WHERE url='"+url+"' AND parent='"+parent+"'");
             query.setClass(LeafDataset.class);
             List<LeafDataset> results = (List<LeafDataset>) query.execute();
             leaf = results.get(0);
@@ -41,7 +41,7 @@ public class PersistenceHelper {
     public CatalogXML getCatalogXML(String url) {
         CatalogXML catalogXML = null;
         try {
-            Query query = persistenceManager.newQuery("javax.jdo.query.SQL", "SELECT * from catalogxml WHERE url='"+url+"' AND parent='"+"'");
+            Query query = persistenceManager.newQuery("javax.jdo.query.SQL", "SELECT * from catalogxml WHERE url='"+url+"'");
             query.setClass(CatalogXML.class);
             List<CatalogXML> results = (List<CatalogXML>) query.execute();
             catalogXML = results.get(0);

@@ -167,7 +167,10 @@ public class TimeAxis {
     public void setMaxValue(double maxValue) {
         this.maxValue = maxValue;
     }
-    
-    
-
+    @Override
+    public String toString() {
+        String sig = this.name;
+        if ( this.calendar != null ) sig = sig+this.calendar;
+        return sig;
+    }
 }

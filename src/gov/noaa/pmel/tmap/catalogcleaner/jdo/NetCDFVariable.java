@@ -1,5 +1,7 @@
 package gov.noaa.pmel.tmap.catalogcleaner.jdo;
 
+import java.util.List;
+
 import javax.jdo.annotations.Column;
 import javax.jdo.annotations.PersistenceCapable;
 import javax.jdo.annotations.Persistent;
@@ -62,6 +64,82 @@ public class NetCDFVariable {
     
     @Persistent
     private VerticalAxis verticalAxis;
+    
+    /* I know this could be done all spiffy with Objects and interrogation and fancy, but I want to be explicit so SQL operations are easy and possible. */
+    @Persistent
+    private List<DoubleAttribute> doubleAttributes;
+    
+    @Persistent
+    private List<FloatAttribute> floatAttributes;
+    
+    @Persistent
+    private List<IntAttribute> intAttributes;
+    
+    @Persistent
+    private List<LongAttribute> longAttributes;
+    
+    @Persistent
+    private List<StringAttribute> stringAttributes;
+    
+    @Persistent
+    private List<ShortAttribute> shortAttributes;
+    
+
+    public List<ShortAttribute> getShortAttributes() {
+        return shortAttributes;
+    }
+
+    public void setShortAttributes(List<ShortAttribute> shortAttributes) {
+        this.shortAttributes = shortAttributes;
+    }
+
+    public String getHasMissingData() {
+        return hasMissingData;
+    }
+
+    public void setHasMissingData(String hasMissingData) {
+        this.hasMissingData = hasMissingData;
+    }
+
+    public List<DoubleAttribute> getDoubleAttributes() {
+        return doubleAttributes;
+    }
+
+    public void setDoubleAttributes(List<DoubleAttribute> doubleAttributes) {
+        this.doubleAttributes = doubleAttributes;
+    }
+
+    public List<FloatAttribute> getFloatAttributes() {
+        return floatAttributes;
+    }
+
+    public void setFloatAttributes(List<FloatAttribute> floatAttributes) {
+        this.floatAttributes = floatAttributes;
+    }
+
+    public List<IntAttribute> getIntAttributes() {
+        return intAttributes;
+    }
+
+    public void setIntAttributes(List<IntAttribute> intAttributes) {
+        this.intAttributes = intAttributes;
+    }
+
+    public List<LongAttribute> getLongAttributes() {
+        return longAttributes;
+    }
+
+    public void setLongAttributes(List<LongAttribute> longAttributes) {
+        this.longAttributes = longAttributes;
+    }
+
+    public List<StringAttribute> getStringAttributes() {
+        return stringAttributes;
+    }
+
+    public void setStringAttributes(List<StringAttribute> stringAttributes) {
+        this.stringAttributes = stringAttributes;
+    }
 
     public double getLonMin() {
         return lonMin;

@@ -20,12 +20,12 @@ import java.net.URL;
 import java.net.URLEncoder;
 import java.security.MessageDigest;
 
-import org.jdom.Document;
-import org.jdom.Element;
-import org.jdom.JDOMException;
-import org.jdom.input.SAXBuilder;
-import org.jdom.output.Format;
-import org.jdom.output.XMLOutputter;
+import org.jdom2.Document;
+import org.jdom2.Element;
+import org.jdom2.JDOMException;
+import org.jdom2.input.SAXBuilder;
+import org.jdom2.output.Format;
+import org.jdom2.output.XMLOutputter;
 /**
  * A collection of helper methods for managing JDOM documents.
  * @author Roland Schweitzer
@@ -168,5 +168,8 @@ public class JDOMUtils {
         Format format = Format.getPrettyFormat();
         return toString(doc, format);
     }
-
+    public static String toCompactString(Document doc) {
+        Format format = Format.getCompactFormat();
+        return toString(doc, format);
+    }
 }

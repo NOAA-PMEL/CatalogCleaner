@@ -11,10 +11,22 @@ public class CatalogReference {
     @Persistent
     @Column(length=500)
     private String url;
+    @Persistent
+    @Column(length=500)
+    private String originalUrl;
 
-    public CatalogReference(String url) {
+    public CatalogReference(String originalUrl, String url) {
         super();
         this.url = url;
+        this.originalUrl = originalUrl;
+    }
+
+    public String getOriginalUrl() {
+        return originalUrl;
+    }
+
+    public void setOriginalUrl(String originalUrl) {
+        this.originalUrl = originalUrl;
     }
 
     public String getUrl() {

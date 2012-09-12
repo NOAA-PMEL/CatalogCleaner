@@ -4,12 +4,18 @@ import gov.noaa.pmel.tmap.addxml.ADDXMLProcessor;
 import gov.noaa.pmel.tmap.addxml.AxisBean;
 import gov.noaa.pmel.tmap.catalogcleaner.jdo.Catalog;
 import gov.noaa.pmel.tmap.catalogcleaner.jdo.CatalogComment;
+import gov.noaa.pmel.tmap.catalogcleaner.jdo.DoubleAttribute;
+import gov.noaa.pmel.tmap.catalogcleaner.jdo.FloatAttribute;
 import gov.noaa.pmel.tmap.catalogcleaner.jdo.GeoAxis;
+import gov.noaa.pmel.tmap.catalogcleaner.jdo.IntAttribute;
 import gov.noaa.pmel.tmap.catalogcleaner.jdo.LeafDataset;
 import gov.noaa.pmel.tmap.catalogcleaner.jdo.LeafNodeReference;
 import gov.noaa.pmel.tmap.catalogcleaner.jdo.LeafNodeReference.DataCrawlStatus;
+import gov.noaa.pmel.tmap.catalogcleaner.jdo.LongAttribute;
 import gov.noaa.pmel.tmap.catalogcleaner.jdo.NetCDFVariable;
 import gov.noaa.pmel.tmap.catalogcleaner.jdo.PersistenceHelper;
+import gov.noaa.pmel.tmap.catalogcleaner.jdo.ShortAttribute;
+import gov.noaa.pmel.tmap.catalogcleaner.jdo.StringAttribute;
 import gov.noaa.pmel.tmap.catalogcleaner.jdo.TimeAxis;
 import gov.noaa.pmel.tmap.catalogcleaner.jdo.VerticalAxis;
 
@@ -26,12 +32,12 @@ import javax.jdo.Transaction;
 import org.datanucleus.api.jdo.JDOPersistenceManagerFactory;
 import org.joda.time.DateTime;
 
+import ucar.ma2.DataType;
 import ucar.nc2.Attribute;
 import ucar.nc2.constants.FeatureType;
 import ucar.nc2.dataset.CoordinateAxis;
 import ucar.nc2.dataset.CoordinateAxis1D;
 import ucar.nc2.dataset.CoordinateAxis1DTime;
-import ucar.nc2.dataset.CoordinateAxis2D;
 import ucar.nc2.dt.GridDatatype;
 import ucar.nc2.dt.grid.GridCoordSys;
 import ucar.nc2.dt.grid.GridDataset;
@@ -60,10 +66,12 @@ public class DataCrawl implements Callable<String> {
     String parent;
     String url;
     PersistenceHelper helper;
-    public DataCrawl(Properties properties, String parent, String url) {
+    boolean force = false;
+    public DataCrawl(Properties properties, String parent, String url, boolean force) {
         super();
         this.parent = parent;
         this.url = url;
+        this.force = force;
         JDOPersistenceManagerFactory pmf = (JDOPersistenceManagerFactory) JDOHelper.getPersistenceManagerFactory(properties);
         PersistenceManager persistenceManager = pmf.getPersistenceManager();
         helper = new PersistenceHelper(persistenceManager);
@@ -77,7 +85,7 @@ public class DataCrawl implements Callable<String> {
         List<LeafNodeReference> leaves = catalog.getLeafNodes();
         for ( Iterator iterator = leaves.iterator(); iterator.hasNext(); ) {
             LeafNodeReference leafNodeReference = (LeafNodeReference) iterator.next();
-            if ( leafNodeReference.getDataCrawlStatus() != DataCrawlStatus.FINISHED ) {
+            if ( leafNodeReference.getDataCrawlStatus() != DataCrawlStatus.FINISHED || force ) {
                 System.out.println("Crawling "+leafNodeReference.getUrl()+" in thread "+Thread.currentThread().getId());
                 tx.begin();
                 try {
@@ -96,8 +104,11 @@ public class DataCrawl implements Callable<String> {
     private void crawlLeafNode(String parent, String url) throws Exception {
         LeafDataset leaf = helper.getLeafDataset(parent, url);
         final CatalogComment cancelMessage = new CatalogComment();
-        if ( leaf == null ) {
-            leaf = new LeafDataset(parent, url);
+        if ( leaf == null || force ) {
+            if ( leaf == null ) {
+                leaf = new LeafDataset(parent, url);
+                helper.save(leaf);
+            }
             GridDataset gridDs = null;
             try {
                 CancelTask cancelTask = new CancelTask() {
@@ -139,7 +150,7 @@ public class DataCrawl implements Callable<String> {
                 leaf.setComment(comment);
             }
         }
-        helper.save(leaf);
+        // Else already have this saved...
     }
     private NetCDFVariable crawlNewVariable(GridDatatype grid) {
         NetCDFVariable var = new NetCDFVariable();
@@ -152,12 +163,71 @@ public class DataCrawl implements Callable<String> {
         var.setHasMissingData(grid.hasMissingData());
         List<Attribute> attributes = grid.getAttributes();
         
+        List<DoubleAttribute> doubleAttributes = new ArrayList<DoubleAttribute>();
+        List<FloatAttribute> floatAttributes = new ArrayList<FloatAttribute>();
+        List<ShortAttribute> shortAttributes = new ArrayList<ShortAttribute>();
+        List<IntAttribute> intAttributes = new ArrayList<IntAttribute>();
+        List<LongAttribute> longAttributes = new ArrayList<LongAttribute>();
+        List<StringAttribute> stringAttributes = new ArrayList<StringAttribute>();
+
         for(int i=0; i<attributes.size(); i++){
-            if(attributes.get(i).getName().toLowerCase().equals("standard_name"))
-                var.setStandardName(attributes.get(i).getStringValue());
-            else if(attributes.get(i).getName().toLowerCase().equals("long_name"))
-                var.setLongName(attributes.get(i).getStringValue());
+            
+            Attribute attribute = attributes.get(i);
+            // Capture a couple of special attributes
+            if(attribute.getName().toLowerCase().equals("standard_name"))
+                var.setStandardName(attribute.getStringValue());
+            else if(attribute.getName().toLowerCase().equals("long_name"))
+                var.setLongName(attribute.getStringValue());
+           
+            // Capture all attributes...
+            if ( attribute.getDataType() == DataType.DOUBLE) {
+                List<Double> v = new ArrayList<Double>();
+                for (int d = 0; d < attribute.getLength(); d++) {
+                    v.add(new Double(attribute.getNumericValue(d).doubleValue()));
+                }
+                doubleAttributes.add(new DoubleAttribute(attribute.getName(), v));
+            } else if ( attribute.getDataType() == DataType.FLOAT ) {
+                List<Float> v = new ArrayList<Float>();
+                for (int d = 0; d < attribute.getLength(); d++) {
+                    v.add(new Float(attribute.getNumericValue(d).floatValue()));
+                }
+                floatAttributes.add(new FloatAttribute(attribute.getName(), v));
+            } else if ( attribute.getDataType() == DataType.SHORT ) {
+                List<Short> v = new ArrayList<Short>();
+                for (int d = 0; d < attribute.getLength(); d++) {
+                    v.add(new Short(attribute.getNumericValue(d).shortValue()));
+                }
+                shortAttributes.add(new ShortAttribute(attribute.getName(), v));
+                
+            } else if ( attribute.getDataType() == DataType.INT ) {
+                List<Integer> v = new ArrayList<Integer>();
+                for (int d = 0; d < attribute.getLength(); d++) {
+                    v.add(new Integer(attribute.getNumericValue(d).intValue()));
+                }
+                intAttributes.add(new IntAttribute(attribute.getName(), v));
+            } else if ( attribute.getDataType() == DataType.LONG ) {
+                List<Long> v = new ArrayList<Long>();
+                for (int d = 0; d < attribute.getLength(); d++) {
+                    v.add(new Long(attribute.getNumericValue(d).longValue()));
+                }
+                longAttributes.add(new LongAttribute(attribute.getName(), v));
+            } else if ( attribute.getDataType() == DataType.STRING ) {
+                List<String> v = new ArrayList<String>();
+                for ( int d = 0; d < attribute.getLength(); d++ ) {
+                    v.add(new String(attribute.getStringValue(d)));
+                }
+                stringAttributes.add(new StringAttribute(attribute.getName(), v));
+            }
         }
+        
+        
+        var.setDoubleAttributes(doubleAttributes);
+        var.setFloatAttributes(floatAttributes);
+        var.setShortAttributes(shortAttributes);
+        var.setIntAttributes(intAttributes);
+        var.setLongAttributes(longAttributes);
+        var.setStringAttributes(stringAttributes);
+        
         
         GridCoordSys gcs = (GridCoordSys) grid.getCoordinateSystem();
         Projection p = gcs.getProjection();
@@ -212,6 +282,7 @@ public class DataCrawl implements Callable<String> {
         var.setLatMax(rect.getLatMax());
         var.setLonMin(rect.getLonMin());
         var.setLonMax(rect.getLonMax());
+        
         
         if ( gcs.hasTimeAxis() ) {
             TimeAxis timeAxis = new TimeAxis();
@@ -268,6 +339,19 @@ public class DataCrawl implements Callable<String> {
             zAxis.setName(coordAxis.getName());
             zAxis.setStart(coordAxis.getStart());
             zAxis.setResolution(coordAxis.getIncrement());
+            zAxis.setMinValue(coordAxis.getMinValue());
+            zAxis.setMaxValue(coordAxis.getMaxValue());
+            if ( coordAxis.isRegular() ) {
+                zAxis.setIsRegular(true);
+                zAxis.setResolution(coordAxis.getIncrement());
+            } else {
+                double v[] = coordAxis.getCoordValues();
+                String values = "";
+                for ( int i = 0; i < v.length; i++ ) {
+                    values = values + v[i] + " ";
+                }
+                zAxis.setValues(values.trim());
+            }
             var.setVerticalAxis(zAxis);
         }
         

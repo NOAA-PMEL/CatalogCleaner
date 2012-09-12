@@ -23,11 +23,13 @@ import java.util.concurrent.Future;
 import javax.jdo.JDOHelper;
 import javax.jdo.PersistenceManager;
 import javax.jdo.Transaction;
+import javax.swing.plaf.OptionPaneUI;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.GnuParser;
 import org.apache.commons.cli.HelpFormatter;
+import org.apache.commons.cli.Option;
 import org.apache.commons.cli.ParseException;
 import org.datanucleus.api.jdo.JDOPersistenceManagerFactory;
 import org.joda.time.DateTime;
@@ -37,6 +39,7 @@ public class DataCrawler {
     private static ExecutorService pool;
     private static PersistenceHelper helper; 
     private static String root;
+    private static boolean force;
     private static List<Future<String>> futures;
     private static Properties properties;
     /**
@@ -53,6 +56,8 @@ public class DataCrawler {
             exclude = cl.getOptionValues("x");
             String t = cl.getOptionValue("t");
             String database = cl.getOptionValue("d");
+            String url = cl.getOptionValue("u");
+            force = cl.hasOption("f");
             int threads = 1;
             try {
                 if ( t != null )
@@ -84,8 +89,15 @@ public class DataCrawler {
                 helper = new PersistenceHelper(persistenceManager);
                 Transaction tx = helper.getTransaction();
                 tx.begin();
-                Catalog rootCatalog = helper.getCatalog(root, root);
-                DataCrawl dataCrawl = new DataCrawl(properties, root, root);
+                Catalog rootCatalog;
+                DataCrawl dataCrawl;
+                if ( url == null ) {
+                    rootCatalog = helper.getCatalog(root, root);
+                    dataCrawl = new DataCrawl(properties, root, root, force);
+                } else {
+                    rootCatalog = helper.getCatalog(root, url);
+                    dataCrawl = new DataCrawl(properties, root, url, force);
+                }
                 futures = new ArrayList<Future<String>>();
                 Future<String> future = pool.submit(dataCrawl);
                 futures.add(future);
@@ -125,7 +137,7 @@ public class DataCrawler {
             CatalogReference catalogReference = (CatalogReference) refsIt.next();
             Catalog sub = helper.getCatalog(parent, catalogReference.getUrl());
             if ( sub != null ) {
-                DataCrawl dataCrawl = new DataCrawl(properties, sub.getParent(), sub.getUrl());
+                DataCrawl dataCrawl = new DataCrawl(properties, sub.getParent(), sub.getUrl(), force);
                 Future<String> future = pool.submit(dataCrawl);
                 futures.add(future);
                 processReferences(sub.getUrl(), sub.getCatalogRefs());

@@ -1,26 +1,26 @@
 package gov.noaa.pmel.tmap.catalogcleaner.crawler;
 
-import gov.noaa.pmel.tmap.catalogcleaner.jdo.Catalog;
-import gov.noaa.pmel.tmap.catalogcleaner.jdo.CatalogXML;
 
 public class TreeCrawlResult {
-    private Catalog catalog;
-    private CatalogXML catalogXML;
-    public TreeCrawlResult(Catalog catalog, CatalogXML catalogXML) {
-        this.catalog = catalog;
-        this.catalogXML = catalogXML;
+    private String parent;
+    private String url;
+    
+    public TreeCrawlResult(String parent, String url) {
+        super();
+        this.parent = parent;
+        this.url = url;
     }
-    public Catalog getCatalog() {
-        return catalog;
+    public String getParent() {
+        return parent;
     }
-    public void setCatalog(Catalog catalog) {
-        this.catalog = catalog;
+    public void setParent(String parent) {
+        this.parent = parent;
     }
-    public CatalogXML getCatalogXML() {
-        return catalogXML;
+    public String getUrl() {
+        return url;
     }
-    public void setCatalogXML(CatalogXML catalogXML) {
-        this.catalogXML = catalogXML;
+    public void setUrl(String url) {
+        this.url = url;
     }
-
+   
 }

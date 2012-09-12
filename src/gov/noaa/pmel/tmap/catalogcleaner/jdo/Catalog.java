@@ -23,6 +23,17 @@ public class Catalog {
     
     @Persistent
     private List<LeafNodeReference> leafNodes;
+    
+    @Persistent
+    private String hasBestTimeSeries;
+
+    public boolean hasBestTimeSeries() {
+        return Boolean.valueOf(hasBestTimeSeries);
+    }
+
+    public void setHasBestTimeSeries(boolean hasBestTimeSeries) {
+        this.hasBestTimeSeries = String.valueOf(hasBestTimeSeries);
+    }
 
     public String getParent() {
         return parent;

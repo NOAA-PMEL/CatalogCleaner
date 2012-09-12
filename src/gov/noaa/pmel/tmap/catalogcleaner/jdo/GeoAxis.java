@@ -119,5 +119,8 @@ public class GeoAxis {
     public void setType(String type) {
         this.type = type;
     }
-
+    @Override
+    public String toString() {
+        return this.name+this.elementSize+this.minValue+this.maxValue+this.size;
+    }
 }

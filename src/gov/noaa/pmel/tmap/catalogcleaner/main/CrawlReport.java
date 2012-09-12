@@ -84,7 +84,9 @@ public class CrawlReport {
                 count = count + leaves.size();
             }
             count = count + report(count, level, catalog.getUrl(), catalog.getCatalogRefs());
+            helper.close();
             System.out.println("Total leaf data sets = "+count);
+            System.exit(0);
         } catch ( ParseException e ) {
             System.err.println( e.getMessage() );
             HelpFormatter formatter = new HelpFormatter();

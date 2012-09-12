@@ -44,6 +44,54 @@ public class VerticalAxis {
     @Persistent
     private double resolution;
     
+    @Persistent
+    private String isRegular;
+    
+    @Persistent
+    private String values;
+    
+    
+    
+    public String getIsNumeric() {
+        return isNumeric;
+    }
+
+    public void setIsNumeric(String isNumeric) {
+        this.isNumeric = isNumeric;
+    }
+
+    public String getIsContiguous() {
+        return isContiguous;
+    }
+
+    public void setIsContiguous(String isContiguous) {
+        this.isContiguous = isContiguous;
+    }
+
+    public String getIsRegular() {
+        return isRegular;
+    }
+    
+    public boolean isRegular() {
+        return Boolean.valueOf(isRegular);
+    }
+
+    public void setIsRegular(boolean isRegular) {
+        this.isRegular = String.valueOf(isRegular);
+    }
+
+    public String getValues() {
+        return values;
+    }
+
+    public void setValues(String values) {
+        this.values = values;
+    }
+
+    public void setIsRegular(String isRegular) {
+        this.isRegular = isRegular;
+    }
+
     public double getStart() {
         return start;
     }
@@ -146,5 +194,9 @@ public class VerticalAxis {
 
     public void setType(String type) {
         this.type = type;
+    }
+    @Override
+    public String toString() {
+        return this.name+this.elementSize+this.size+this.maxValue+this.minValue;
     }
 }

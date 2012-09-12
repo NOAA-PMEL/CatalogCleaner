@@ -19,5 +19,13 @@ public class CrawlerOptions extends Options {
         addOption(threads);
         Option database = new Option("d", "database", true, "Name of the catalog datastore, usuall cc_yyyyMMdd.");
         addOption(database);
+        Option threddsContext = new Option("c", "context", true, "The thredds context name e.g. 'geoide', the default is 'thredds'.");
+        addOption(threddsContext);
+        Option threddsServer = new Option("s", "server", true, "The URL of the server where the clean catalogs will be deployed. (Requried for cleaning)");
+        addOption(threddsServer);
+        Option url = new Option("u", "url", true, "URL of a sub-catalog to clean.");
+        addOption(url);
+        Option force = new Option("f", "force", false, "Download everything again (catalogs and/or netCDF data) regardless of the status of the previous crawl.");
+        addOption(force);
     }
 }
