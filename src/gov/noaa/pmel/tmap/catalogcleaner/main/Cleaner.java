@@ -1,12 +1,27 @@
 package gov.noaa.pmel.tmap.catalogcleaner.main;
 
+import gov.noaa.pmel.tmap.catalogcleaner.jdo.Catalog;
+import gov.noaa.pmel.tmap.catalogcleaner.jdo.CatalogReference;
+import gov.noaa.pmel.tmap.catalogcleaner.jdo.CatalogXML;
+import gov.noaa.pmel.tmap.catalogcleaner.jdo.GeoAxis;
+import gov.noaa.pmel.tmap.catalogcleaner.jdo.LeafDataset;
+import gov.noaa.pmel.tmap.catalogcleaner.jdo.LeafNodeReference;
+import gov.noaa.pmel.tmap.catalogcleaner.jdo.LeafNodeReference.DataCrawlStatus;
+import gov.noaa.pmel.tmap.catalogcleaner.jdo.NetCDFVariable;
+import gov.noaa.pmel.tmap.catalogcleaner.jdo.PersistenceHelper;
+import gov.noaa.pmel.tmap.catalogcleaner.jdo.TimeAxis;
+import gov.noaa.pmel.tmap.catalogcleaner.jdo.VerticalAxis;
+import gov.noaa.pmel.tmap.cleaner.cli.CrawlerOptions;
+import gov.noaa.pmel.tmap.cleaner.xml.JDOMUtils;
+import gov.noaa.pmel.tmap.cleaner.xml.UrlPathFilter;
+
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.io.UnsupportedEncodingException;
-import java.net.URI;
+import java.net.MalformedURLException;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.ArrayList;
@@ -17,25 +32,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 import javax.jdo.JDOHelper;
 import javax.jdo.PersistenceManager;
 import javax.jdo.Transaction;
-
-import gov.noaa.pmel.tmap.catalogcleaner.jdo.Catalog;
-import gov.noaa.pmel.tmap.catalogcleaner.jdo.CatalogReference;
-import gov.noaa.pmel.tmap.catalogcleaner.jdo.CatalogXML;
-import gov.noaa.pmel.tmap.catalogcleaner.jdo.GeoAxis;
-import gov.noaa.pmel.tmap.catalogcleaner.jdo.LeafDataset;
-import gov.noaa.pmel.tmap.catalogcleaner.jdo.LeafNodeReference;
-import gov.noaa.pmel.tmap.catalogcleaner.jdo.NetCDFVariable;
-import gov.noaa.pmel.tmap.catalogcleaner.jdo.PersistenceHelper;
-import gov.noaa.pmel.tmap.catalogcleaner.jdo.LeafNodeReference.DataCrawlStatus;
-import gov.noaa.pmel.tmap.catalogcleaner.jdo.TimeAxis;
-import gov.noaa.pmel.tmap.catalogcleaner.jdo.VerticalAxis;
-import gov.noaa.pmel.tmap.cleaner.cli.CrawlerOptions;
-import gov.noaa.pmel.tmap.cleaner.xml.JDOMUtils;
-import gov.noaa.pmel.tmap.cleaner.xml.UrlPathFilter;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -49,24 +50,10 @@ import org.jdom2.Element;
 import org.jdom2.JDOMException;
 import org.jdom2.Namespace;
 import org.jdom2.Parent;
-import org.jdom2.filter.AttributeFilter;
 import org.jdom2.filter.ElementFilter;
 import org.jdom2.output.Format;
-import org.jdom2.output.LineSeparator;
 import org.jdom2.output.XMLOutputter;
 import org.jdom2.util.IteratorIterable;
-
-import com.sun.xml.internal.fastinfoset.stax.events.NamespaceBase;
-
-
-import sun.awt.windows.ThemeReader;
-import thredds.catalog.InvCatalog;
-import thredds.catalog.InvCatalogFactory;
-import thredds.catalog.InvDataset;
-import thredds.catalog.InvMetadata;
-import thredds.catalog.InvService;
-import thredds.catalog.ServiceType;
-import thredds.catalog.ThreddsMetadata;
 
 public class Cleaner {
     private static String viewer_0 = "http://ferret.pmel.noaa.gov/geoideLAS/getUI.do?data_url=";
@@ -82,8 +69,12 @@ public class Cleaner {
     private static String threddsContext;
     private static String threddsServer;
     private static String threddsServerName;
+    private static String[] exclude;
+    
     private static PersistenceHelper helper;
     private static Namespace ns = Namespace.getNamespace("http://www.unidata.ucar.edu/namespaces/thredds/InvCatalog/v1.0");
+    private static Namespace netcdfns = Namespace.getNamespace("http://www.unidata.ucar.edu/namespaces/netcdf/ncml-2.2");
+    private static Namespace xlink = Namespace.getNamespace("xlink", "http://www.w3.org/1999/xlink");
     /**
      * @param args
      */
@@ -100,6 +91,7 @@ public class Cleaner {
             root = cl.getOptionValue("r");
             String url = cl.getOptionValue("u");
             threddsContext = cl.getOptionValue("c");
+            exclude = cl.getOptionValues("x");
             if ( threddsContext == null ) {
                 threddsContext = "thredds";
             }
@@ -138,9 +130,9 @@ public class Cleaner {
             }
             
             System.out.println("Doing a catalog clean for root "+root);
-            if ( catalog.getLeafNodes() != null && catalog.getLeafNodes().size() > 0 ) {
-                clean(catalogXML, catalog);
-            }
+            
+            clean(catalogXML, catalog);
+            
             List<CatalogReference> refs = catalog.getCatalogRefs();
             processChildren(root, refs);
             tx.commit();
@@ -172,9 +164,7 @@ public class Cleaner {
             CatalogReference catalogReference = refsIt.next();
             Catalog catalog = helper.getCatalog(url, catalogReference.getUrl());
             CatalogXML catalogXML = helper.getCatalogXML(catalogReference.getUrl());
-            if ( catalog.getLeafNodes() != null && catalog.getLeafNodes().size() > 0 ) {
-                clean(catalogXML, catalog);
-            }
+            clean(catalogXML, catalog);    
             if ( catalog.getCatalogRefs() != null && catalog.getCatalogRefs().size() > 0 ) {
                 processChildren(catalog.getUrl(), catalog.getCatalogRefs());
             }
@@ -187,42 +177,82 @@ public class Cleaner {
         String xml = catalogXML.getXml();
         if ( xml != null && xml.length() > 0 ) {
             JDOMUtils.XML2JDOM(xml, doc);
+            if ( catalog.getLeafNodes() != null && catalog.getLeafNodes().size() > 0 ) {
 
-            // Remove the services
-            removeRemoteServices(doc);  
-            addLocalServices(doc);
+                // Remove the services
+                removeRemoteServices(doc);  
+                addLocalServices(doc);
 
-            List<LeafNodeReference> leaves = catalog.getLeafNodes();
-            Map<String, List<LeafNodeReference>> aggregates = aggregate(catalog.getUrl(), leaves);
+                List<LeafNodeReference> leaves = catalog.getLeafNodes();
+                Map<String, List<LeafNodeReference>> aggregates = aggregate(catalog.getUrl(), leaves);
 
-            for ( Iterator<String> aggIt = aggregates.keySet().iterator(); aggIt.hasNext(); ) {
-                String key = aggIt.next();
-                List<LeafNodeReference> aggs = aggregates.get(key);
-                // Remove the old data set references and add the new ncml.
-                addNCML(doc, catalog.getUrl(), aggs);
-                for ( Iterator<LeafNodeReference> aggsIt = aggs.iterator(); aggsIt.hasNext(); ) {
-                    LeafNodeReference dataset = (LeafNodeReference) aggsIt.next();
-                    System.out.println("\t\tAggreagate with: "+dataset.getUrl());
-                }           
+                for ( Iterator<String> aggIt = aggregates.keySet().iterator(); aggIt.hasNext(); ) {
+                    String key = aggIt.next();
+                    List<LeafNodeReference> aggs = aggregates.get(key);
+                    // Remove the old data set references and add the new ncml.
+                    addNCML(doc, catalog.getUrl(), aggs);
+                    for ( Iterator<LeafNodeReference> aggsIt = aggs.iterator(); aggsIt.hasNext(); ) {
+                        LeafNodeReference dataset = (LeafNodeReference) aggsIt.next();
+                        System.out.println("\t\tAggreagate with: "+dataset.getUrl());
+                    }           
+                }
+                // Remove child refs for best time series catalog...
+                if ( catalog.hasBestTimeSeries() ) {
+                    remove(doc, "catalogRef");
+                }
             }
-            // Remove child refs for best time series catalog...
-            if ( catalog.hasBestTimeSeries() ) {
-                remove(doc, "catalogRef");
-            }
-            //addMetaData(doc, catalog);
+            updateCatalogReferences(doc.getRootElement(), catalog.getCatalogRefs());
+            
             XMLOutputter xout = new XMLOutputter();
             Format format = Format.getPrettyFormat();
             format.setLineSeparator(System.getProperty("line.separator"));
             xout.setFormat(format);
-            URL catalogURL = new URL(catalog.getUrl());
-            File ffile = new File(threddsContext+File.separator+catalogURL.getHost()+File.separator+catalogURL.getPath().substring(0, catalogURL.getPath().lastIndexOf("/")));
-            ffile.mkdirs();
-            PrintStream fout = new PrintStream(ffile.getPath()+File.separator+catalogURL.getPath().substring(catalogURL.getPath().lastIndexOf("/")));
+            PrintStream fout;
+            if ( catalog.getUrl().equals(catalog.getParent()) ) {
+                fout = new PrintStream("CleanCatalog.xml"); 
+            } else {
+                URL catalogURL = new URL(catalog.getUrl());
+                File ffile = new File("CleanCatalogs"+File.separator+catalogURL.getHost()+File.separator+catalogURL.getPath().substring(0, catalogURL.getPath().lastIndexOf("/")));
+                ffile.mkdirs();
+                fout = new PrintStream(ffile.getPath()+File.separator+catalogURL.getPath().substring(catalogURL.getPath().lastIndexOf("/")));
+            }
+            
             xout.output(doc, fout);
             fout.close();
         } else {
             System.err.println("Catalog XML does not exist for: "+catalogXML.getUrl());
         }
+    }
+    private static void updateCatalogReferences(Element element, List<CatalogReference> refs) throws MalformedURLException {
+        List<Element> children = element.getChildren();
+        List<Element> remove = new ArrayList<Element>();
+        for ( Iterator refIt = children.iterator(); refIt.hasNext(); ) {
+            Element child = (Element) refIt.next();
+            if ( child.getName().equals("catalogRef") ) {                
+                boolean convert = true;
+                String href = child.getAttributeValue("href", xlink);
+                for ( int i = 0; i < exclude.length; i++ ) {
+                    if ( Pattern.matches(exclude[i], href)) {
+                        remove.add(child);
+                        convert = false;
+                    }
+                }
+                
+                if ( convert ) {
+                    for ( Iterator refsIt = refs.iterator(); refsIt.hasNext(); ) {
+                        CatalogReference reference = (CatalogReference) refsIt.next();
+                        if ( reference.getOriginalUrl().equals(href) && href.startsWith("http")) {
+                            URL catalogURL = new URL(reference.getUrl());
+                            String dir = "CleanCatalogs"+File.separator+catalogURL.getHost()+catalogURL.getPath().substring(0, catalogURL.getPath().lastIndexOf("/"))+catalogURL.getPath().substring(catalogURL.getPath().lastIndexOf("/"));
+                            child.setAttribute("href", dir, xlink);
+                        }
+                    }
+                    
+                }
+            }
+            updateCatalogReferences(child, refs);
+        }
+        element.getChildren().removeAll(remove);
     }
     private static void remove(Document doc, String element) {
         Iterator removeIt = doc.getDescendants(new ElementFilter(element));
@@ -236,30 +266,9 @@ public class Cleaner {
             parent.removeContent(new ElementFilter(element));
         }
     }
-    private static void addMetaData(Document doc, Catalog catalog) throws URISyntaxException {
-        InvCatalogFactory catfactory = new InvCatalogFactory("default", false);
-        String strippedDoc = JDOMUtils.toString(doc);
-        InvCatalog thredds = (InvCatalog) catfactory.readXML(strippedDoc, new URI(catalog.getUrl()));
-        List<InvDataset> rootInvDatasets = thredds.getDatasets();       
-        findMetadata(rootInvDatasets, catalog);
-    }
-    private static void findMetadata(List<InvDataset> datasets, Catalog catalog) {
-        for ( Iterator dsIt = datasets.iterator(); dsIt.hasNext(); ) {
-            InvDataset invDataset = (InvDataset) dsIt.next();
-            List<ThreddsMetadata.Contributor> contributors = invDataset.getContributors();
-            ThreddsMetadata.GeospatialCoverage coverage = invDataset.getGeospatialCoverage();
-            List<ThreddsMetadata.Source> souces = invDataset.getCreators();
-            System.out.println("The data set "+invDataset.getName()+" has: ");
-            System.out.println("\t coverage: "+coverage);
+    private static void addNCML(Document doc, String parent, List<LeafNodeReference> aggs) throws MalformedURLException {
 
-            if ( invDataset.hasNestedDatasets() ) {
-                findMetadata(invDataset.getDatasets(), catalog);
-            }
-        }
-    }
-    private static void addNCML(Document doc, String parent, List<LeafNodeReference> aggs) {
-
-
+        boolean aggregating = aggs.size() > 1;
 
         LeafNodeReference leafNode = aggs.get(0); 
         LeafDataset data = helper.getLeafDataset(parent, leafNode.getUrl());
@@ -276,7 +285,7 @@ public class Cleaner {
             }
             index++;
         }   
-        Element ncml = new Element("netcdf", ns);
+        Element ncml = new Element("netcdf", netcdfns);
 
         Element geospaticalCoverage = new Element("geospaticalCoverage", ns);
 
@@ -287,15 +296,11 @@ public class Cleaner {
 
         properties.add(variables);
 
-
-
-        ncml.setAttribute("location", aggs.get(0).getUrl());
-
-
-        Namespace netcdfns = Namespace.getNamespace("http://www.unidata.ucar.edu/namespaces/netcdf/ncml-2.2");
-        Namespace xlink = Namespace.getNamespace("xlink", "http://www.w3.org/1999/xlink");
-        Element aggregation = new Element("aggergation", netcdfns);
-        if ( aggs.size() == 1 ) {
+        URL aggURL = new URL(aggs.get(0).getUrl());
+        
+        
+        Element aggregation = new Element("aggregation", netcdfns);
+        if ( !aggregating ) {
             ncml.setAttribute("location", aggs.get(0).getUrl());
         } else {
             aggregation.setAttribute("type", "joinExisting");
@@ -323,9 +328,9 @@ public class Cleaner {
                 latunits = "degN";
             }
             Element northsouth = new Element("northsouth", ns);
-            Element ystart = new Element("start");
-            Element ysize = new Element("size");
-            Element yunits = new Element("units");
+            Element ystart = new Element("start", ns);
+            Element ysize = new Element("size", ns);
+            Element yunits = new Element("units", ns);
             ystart.setText(String.valueOf(latmin));
             ysize.setText(String.valueOf(latsize));
             yunits.setText(latunits);
@@ -335,17 +340,17 @@ public class Cleaner {
             geospaticalCoverage.addContent(northsouth);
 
             GeoAxis xaxis = representativeVariable.getxAxis();
-            double lonmax = representativeVariable.getLatMax();
-            double lonmin = representativeVariable.getLatMin();
+            double lonmax = representativeVariable.getLonMax();
+            double lonmin = representativeVariable.getLonMin();
             double lonsize = lonmax - lonmin;
             String lonunits = xaxis.getUnitsString();
             if ( lonunits == null ) {
                 lonunits = "degE";
             }
             Element eastwest = new Element("eastwest", ns);
-            Element xstart = new Element("start");
-            Element xsize = new Element("size");
-            Element xunits = new Element("units");
+            Element xstart = new Element("start", ns);
+            Element xsize = new Element("size", ns);
+            Element xunits = new Element("units", ns);
             xstart.setText(String.valueOf(lonmin));
             xsize.setText(String.valueOf(lonsize));
             xunits.setText(lonunits);
@@ -371,10 +376,9 @@ public class Cleaner {
             ewPropertyStart.setAttribute("value", String.valueOf(lonmin));
 
             properties.add(ewPropertyStart);
-
             Element nsPropertyNumberOfPoints = new Element("property", ns);
             nsPropertyNumberOfPoints.setAttribute("name", "northsouthPropertyNumberOfPoints");
-            ewPropertyNumberOfPoints.setAttribute("value", String.valueOf(yaxis.getSize()));
+            nsPropertyNumberOfPoints.setAttribute("value", String.valueOf(yaxis.getSize()));
 
             properties.add(nsPropertyNumberOfPoints);
 
@@ -517,28 +521,35 @@ public class Cleaner {
 
         }
 
-        String aggURL = threddsServer+"/dodsC/"+name+"_aggregtion";
+        String dataURL;
+        if ( aggregating ) {
+            dataURL = threddsServer+"/dodsC/"+name+"_aggregation";
+        } else {
+            dataURL = leafNode.getUrl();
+        }
         Element viewer0Property = new Element("property", ns);
         viewer0Property.setAttribute("name", "viewer_0");
-        viewer0Property.setAttribute("value", viewer_0+aggURL+viewer_0_description);
+        viewer0Property.setAttribute("value", viewer_0+dataURL+viewer_0_description);
 
         properties.add(viewer0Property);
 
         Element viewer1Property = new Element("property", ns);
         viewer1Property.setAttribute("name", "viewer_1");
-        viewer1Property.setAttribute("value", viewer_1+aggURL+viewer_1_description);
+        viewer1Property.setAttribute("value", viewer_1+dataURL+viewer_1_description);
 
         properties.add(viewer1Property);
 
         Element viewer2Property = new Element("property", ns);
         viewer2Property.setAttribute("name", "viewer_2");
-        viewer2Property.setAttribute("value", viewer_2+aggURL+viewer_2_description);
+        viewer2Property.setAttribute("value", viewer_2+dataURL+viewer_2_description);
 
         properties.add(viewer2Property);
 
 
-        if ( matchingDataset != null ) {
-            matchingDataset.setAttribute("urlPath", name+"_aggregation");
+        if ( matchingDataset != null && aggregating) {
+            String path = aggURL.getPath();
+            path = path.substring(path.lastIndexOf("dodsC/")+6, path.lastIndexOf('/')+1);
+            matchingDataset.setAttribute("urlPath", path+name+"_aggregation");
             matchingDataset.setAttribute("name", name);
         }
         if ( p != null ) {
@@ -554,8 +565,8 @@ public class Cleaner {
             Element service = new Element("serviceName", ns);
             service.addContent( threddsServerName+"_compound");
             matchingDataset.addContent(0, service);
-            matchingDataset.addContent(geospaticalCoverage);
-            matchingDataset.addContent(properties);
+            matchingDataset.addContent(0, geospaticalCoverage);
+            matchingDataset.addContent(0, properties);
         }
     }
     private static void removeRemoteServices(Document doc ) {
@@ -579,6 +590,7 @@ public class Cleaner {
         Element service = new Element("service", ns);
         service.setAttribute("name", threddsServerName+"_compound");
         service.setAttribute("serviceType", "compound");
+        service.setAttribute("base", "");
         addService(service, "wms", "WMS");
         addService(service, "wcs", "WCS");
         addService(service, "ncml", "NCML");
@@ -596,6 +608,7 @@ public class Cleaner {
         fullbase = fullbase + threddsContext;
         if ( !fullbase.endsWith("/") ) fullbase = fullbase + "/";
         fullbase = fullbase + base;
+        if ( !fullbase.endsWith("/") ) fullbase = fullbase + "/";
         service.setAttribute("base", fullbase);
         service.setAttribute("serviceType", type);
         compoundService.addContent(service);
