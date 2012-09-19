@@ -99,7 +99,7 @@ public class Proxy {
 
 			if (rc != HttpStatus.SC_OK) {
 
-				throw new IOException("Failed to read URL");
+                throw new IOException("Failed to read URL");
 
 			}
 

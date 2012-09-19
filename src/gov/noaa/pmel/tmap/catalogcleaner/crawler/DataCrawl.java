@@ -97,6 +97,17 @@ public class DataCrawl implements Callable<String> {
                     leafNodeReference.setDataCrawlStatus(DataCrawlStatus.FAILED);
                 }
                 tx.commit();
+            } else {
+                System.out.println("Already crawled "+leafNodeReference.getUrl()+" in thread "+Thread.currentThread().getId());
+                LeafDataset data = helper.getLeafDataset(catalog.getUrl(), leafNodeReference.getUrl());
+                if ( data == null ) {
+                    tx.begin();
+                    System.out.println("\t Data null, recrawling "+leafNodeReference.getUrl()+" in thread "+Thread.currentThread().getId());
+                    crawlLeafNode(catalog.getUrl(), leafNodeReference.getUrl());
+                    leafNodeReference.setDataCrawlStatus(DataCrawlStatus.FINISHED);
+                    leafNodeReference.setCrawlDate(DateTime.now().toString("yyyy-MM-dd HH:mm:ss"));
+                    tx.commit();
+                }
             }
         }
         return url;

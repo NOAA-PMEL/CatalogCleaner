@@ -85,7 +85,7 @@ public class DataCrawler {
                 properties.setProperty("datanucleus.ConnectionURL", connectionURL);
                 JDOPersistenceManagerFactory pmf = (JDOPersistenceManagerFactory) JDOHelper.getPersistenceManagerFactory(properties);
                 PersistenceManager persistenceManager = pmf.getPersistenceManager();
-                System.out.println("We are using mulitple threads. "+persistenceManager.getMultithreaded());
+                System.out.println("Starting data crawl work at "+DateTime.now().toString("yyyy-MM-dd HH:mm:ss")+" with "+threads+" threads.");
                 helper = new PersistenceHelper(persistenceManager);
                 Transaction tx = helper.getTransaction();
                 tx.begin();
@@ -127,7 +127,7 @@ public class DataCrawler {
             System.err.println( e.getMessage() );
             HelpFormatter formatter = new HelpFormatter();
             formatter.setWidth(width);
-            formatter.printHelp("TreeCrawler", crawlerOptions, true);
+            formatter.printHelp("DataCrawler", crawlerOptions, true);
             System.exit(-1);
         }
     }
@@ -151,6 +151,7 @@ public class DataCrawler {
         }
     }
     public static void shutdown(int code) {
+        System.out.println("All work complete.  Shutting down at "+DateTime.now().toString("yyyy-MM-dd HH:mm:ss"));
         pool.shutdown();
         System.exit(code);
     }

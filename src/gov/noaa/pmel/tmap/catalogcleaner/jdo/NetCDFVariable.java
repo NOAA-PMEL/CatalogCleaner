@@ -65,7 +65,7 @@ public class NetCDFVariable {
     @Persistent
     private VerticalAxis verticalAxis;
     
-    /* I know this could be done all spiffy with Objects and interrogation and fancy, but I want to be explicit so SQL operations are easy and possible. */
+    /* I know this could be done all spiffy with Objects and introspection and fancy, but I want to be explicit so SQL operations are easy and possible. */
     @Persistent
     private List<DoubleAttribute> doubleAttributes;
     

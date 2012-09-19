@@ -102,6 +102,7 @@ public class TreeCrawler {
                 ((SchemaAwareStoreManager)ctx.getStoreManager()).createSchema(classNames, properties);
                 PersistenceManager persistenceManager = pmf.getPersistenceManager();
                 helper = new PersistenceHelper(persistenceManager);
+                System.out.println("Starting tree crawl work at "+DateTime.now().toString("yyyy-MM-dd HH:mm:ss")+" with "+threads+" threads.");
                 TreeCrawl crawl = new TreeCrawl(properties, root, root);
                 List<Future> futures = new ArrayList<Future>();
                 Future future = pool.submit(crawl);
@@ -140,6 +141,7 @@ public class TreeCrawler {
         }
     }
     private static void shutdown(int c) {
+        System.out.println("All work complete.  Shutting down at "+DateTime.now().toString("yyyy-MM-dd HH:mm:ss"));
         pool.shutdown();
         System.exit(c);
     }
@@ -149,7 +151,7 @@ public class TreeCrawler {
             Future<TreeCrawlResult> future = (Future<TreeCrawlResult>) futureIt.next();
             TreeCrawlResult result = future.get();
             Catalog catalog = helper.getCatalog(result.getParent(), result.getUrl());
-            if ( !catalog.hasBestTimeSeries() ) {
+            if ( catalog != null && !catalog.hasBestTimeSeries() ) {
                 List<CatalogReference> refs = catalog.getCatalogRefs();
                 List<CatalogReference> remove = new ArrayList();
                 for ( Iterator refsIt = refs.iterator(); refsIt.hasNext(); ) {

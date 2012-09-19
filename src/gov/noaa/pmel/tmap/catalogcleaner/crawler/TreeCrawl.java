@@ -72,7 +72,12 @@ public class TreeCrawl implements Callable<TreeCrawlResult> {
         catalog.setUrl(url);
         System.out.println("Downloading "+url+" in thread "+Thread.currentThread().getId());
         ByteArrayOutputStream stream = new ByteArrayOutputStream();
-        proxy.executeGetMethodAndStreamResult(url, stream);
+        try {
+            proxy.executeGetMethodAndStreamResult(url, stream);
+        } catch ( Exception e ) {
+            System.err.println("Failed to read "+url+" in thread "+Thread.currentThread().getId());
+            return new TreeCrawlResult(parent, url);
+        }
         String xml = stream.toString();
         if ( catalogXML == null ) {
             catalogXML = new CatalogXML();
@@ -81,7 +86,7 @@ public class TreeCrawl implements Callable<TreeCrawlResult> {
         } else {
             if ( catalogXML != null ) {
                 String oldxml = catalogXML.getXml();
-                if ( oldxml.equals(xml) ) {
+                if ( oldxml != null && oldxml.equals(xml) ) {
                     return new TreeCrawlResult(parent, url);
                 }
             }
