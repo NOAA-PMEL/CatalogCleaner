@@ -112,25 +112,21 @@ public class TreeCrawler {
                 shutdown(0);
             } catch ( FileNotFoundException e ) {
                 e.printStackTrace();
-                shutdown(-1);
             } catch ( IOException e ) {
                 e.printStackTrace();
-                shutdown(-1);
             } catch ( SQLException e ) {
                 e.printStackTrace();
-                shutdown(-1);
             } catch ( InstantiationException e ) {
                 e.printStackTrace();
-                shutdown(-1);
             } catch ( IllegalAccessException e ) {
                 e.printStackTrace();
-                shutdown(-1);
             } catch ( ClassNotFoundException e ) {
                 e.printStackTrace();
-                shutdown(-1);
             } catch ( Exception e ) {
                 e.printStackTrace();
-                shutdown(-1);
+            } finally {
+                helper.close();
+                shutdown(0);
             }
         } catch ( ParseException e ) {
             System.err.println( e.getMessage() );

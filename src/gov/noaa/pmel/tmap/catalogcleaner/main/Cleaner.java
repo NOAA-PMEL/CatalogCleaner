@@ -9,8 +9,11 @@ import gov.noaa.pmel.tmap.catalogcleaner.jdo.LeafNodeReference;
 import gov.noaa.pmel.tmap.catalogcleaner.jdo.LeafNodeReference.DataCrawlStatus;
 import gov.noaa.pmel.tmap.catalogcleaner.jdo.NetCDFVariable;
 import gov.noaa.pmel.tmap.catalogcleaner.jdo.PersistenceHelper;
+import gov.noaa.pmel.tmap.catalogcleaner.jdo.StringAttribute;
 import gov.noaa.pmel.tmap.catalogcleaner.jdo.TimeAxis;
 import gov.noaa.pmel.tmap.catalogcleaner.jdo.VerticalAxis;
+import gov.noaa.pmel.tmap.catalogcleaner.util.Leaf;
+import gov.noaa.pmel.tmap.catalogcleaner.util.StartTimeComparator;
 import gov.noaa.pmel.tmap.cleaner.cli.CrawlerOptions;
 import gov.noaa.pmel.tmap.cleaner.xml.JDOMUtils;
 import gov.noaa.pmel.tmap.cleaner.xml.UrlPathFilter;
@@ -25,6 +28,7 @@ import java.net.MalformedURLException;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -193,16 +197,18 @@ public class Cleaner {
                 addLocalServices(doc);
 
                 List<LeafNodeReference> leaves = catalog.getLeafNodes();
-                Map<String, List<LeafNodeReference>> aggregates = aggregate(catalog.getUrl(), leaves);
+                Map<String, List<Leaf>> aggregates = aggregate(catalog.getUrl(), leaves);
 
                 for ( Iterator<String> aggIt = aggregates.keySet().iterator(); aggIt.hasNext(); ) {
                     String key = aggIt.next();
-                    List<LeafNodeReference> aggs = aggregates.get(key);
+                    List<Leaf> aggs = aggregates.get(key);
                     // Remove the old data set references and add the new ncml.
                     addNCML(doc, catalog.getUrl(), aggs);
-                    for ( Iterator<LeafNodeReference> aggsIt = aggs.iterator(); aggsIt.hasNext(); ) {
-                        LeafNodeReference dataset = (LeafNodeReference) aggsIt.next();
-                        System.out.println("\t\tAggreagate with: "+dataset.getUrl());
+                    System.out.println("\tKey = "+key);
+                    for ( Iterator<Leaf> aggsIt = aggs.iterator(); aggsIt.hasNext(); ) {
+                        Leaf leaf = (Leaf) aggsIt.next();
+                        LeafDataset dataset = (LeafDataset) leaf.getLeafDataset();
+                        System.out.println("\t\thas aggreagate: "+dataset.getUrl());
                     }           
                 }
                 // Remove child refs for best time series catalog...
@@ -239,10 +245,11 @@ public class Cleaner {
         Element catalogE = new Element("catalog");
         catalogE.setAttribute("name", "Empty catalog for "+url);
         catalogE.addNamespaceDeclaration(xlink);
-        Element documentation = new Element("documentation", ns);
-        documentation.setAttribute("type", "Notes");
-        documentation.setAttribute("title", "An automated process attempted to read this catalog and build a clean representation, but the catalog could not be read at the time the process ran.");
-        catalogE.addContent(documentation);
+        //<dataset name="This folder is produced through an automated cleaning process as part of the Unified Access framework (UAF) project (http://geo-ide.noaa.gov/).  The catalog being cleaned contained no datasets that met the UAF standards.  That catalog may be accessed directly at http://sdf.ndbc.noaa.gov:8080/thredds/catalog/glider/catalog.html." urlPath="http://sdf.ndbc.noaa.gov:8080/thredds/catalog/glider/catalog.html" />
+        Element dataset = new Element("dataset", ns);
+        dataset.setAttribute("name", "This catalog was produced through an automated cleaning process as part of the Unified Access framework (UAF) project (http://geo-ide.noaa.gov/).  The catalog being cleaned contained no datasets that met the UAF standards.  That catalog may be accessed directly at "+url+".");
+        dataset.setAttribute("urlPath", url);
+        catalogE.addContent(dataset);
         doc.addContent(catalogE);
         XMLOutputter xout = new XMLOutputter();
         Format format = Format.getPrettyFormat();
@@ -307,12 +314,14 @@ public class Cleaner {
             parent.removeContent(new ElementFilter(element));
         }
     }
-    private static void addNCML(Document doc, String parent, List<LeafNodeReference> aggs) throws MalformedURLException {
+    private static void addNCML(Document doc, String parent, List<Leaf> aggs) throws MalformedURLException {
 
         boolean aggregating = aggs.size() > 1;
 
-        LeafNodeReference leafNode = aggs.get(0); 
-        LeafDataset data = helper.getLeafDataset(parent, leafNode.getUrl());
+        Leaf leaf = aggs.get(0);
+        
+        LeafDataset dataOne = leaf.getLeafDataset();
+        LeafNodeReference leafNode = leaf.getLeafNodeReference();
 
         Element matchingDataset = null;
         IteratorIterable datasetIt = doc.getRootElement().getDescendants(new UrlPathFilter(leafNode.getUrlPath()));
@@ -335,12 +344,12 @@ public class Cleaner {
         Element variables = new Element("variables", ns);
         variables.setAttribute("vocabulary", "CF-1.0");
 
-        URL aggURL = new URL(aggs.get(0).getUrl());
+        URL aggURL = new URL(leafNode.getUrl());
 
 
         Element aggregation = new Element("aggregation", netcdfns);
         if ( !aggregating ) {
-            ncml.setAttribute("location", aggs.get(0).getUrl());
+            ncml.setAttribute("location", leafNode.getUrl());
         } else {
             aggregation.setAttribute("type", "joinExisting");
             ncml.addContent(aggregation);
@@ -352,10 +361,10 @@ public class Cleaner {
             properties.add(documentation);
         }
 
-        if ( data != null && data.getVariables().size() > 0) {
+        if ( dataOne != null && dataOne.getVariables().size() > 0) {
             // We are going to aggregate.  Get the 0th variable and use it to fill out the GeoSpaticalCoverage
             // By definition, any other variable in this collection should have the same characteristics.
-            NetCDFVariable representativeVariable = data.getVariables().get(0);
+            NetCDFVariable representativeVariable = dataOne.getVariables().get(0);
 
 
 
@@ -464,7 +473,7 @@ public class Cleaner {
                 property.setAttribute("value", vs);
                 properties.add(property);
                 String hasZ = "";
-                for ( Iterator varIt = data.getVariables().iterator(); varIt.hasNext(); ) {
+                for ( Iterator varIt = dataOne.getVariables().iterator(); varIt.hasNext(); ) {
                     NetCDFVariable var = (NetCDFVariable) varIt.next();
                     hasZ = hasZ + var.getName() + " ";
                 }
@@ -486,7 +495,7 @@ public class Cleaner {
                 aggregation.setAttribute("dimName", taxis.getName());
                 String hasT = "";
                 long tsize = 0;
-                for ( Iterator varIt = data.getVariables().iterator(); varIt.hasNext(); ) {
+                for ( Iterator varIt = dataOne.getVariables().iterator(); varIt.hasNext(); ) {
                     NetCDFVariable var = (NetCDFVariable) varIt.next();
                     hasT = hasT + var.getName() + " ";
                 }
@@ -507,12 +516,12 @@ public class Cleaner {
         String timeEnd = "";
         long timeSize = 0;
         for ( int a = 0; a < aggs.size(); a++ ) {
-            LeafNodeReference leafNodeReference = aggs.get(a);
+            Leaf l = aggs.get(a);
+            LeafDataset dataset = l.getLeafDataset();
             Element netcdf = new Element("netcdf", netcdfns);
-            netcdf.setAttribute("location", leafNodeReference.getUrl());
-            data = helper.getLeafDataset(parent, leafNodeReference.getUrl());
-            if ( data.getVariables() != null && data.getVariables().size() > 0 ) {
-                TimeAxis ta = data.getVariables().get(0).getTimeAxis();
+            netcdf.setAttribute("location", dataset.getUrl());
+            if ( dataset.getVariables() != null && dataset.getVariables().size() > 0 ) {
+                TimeAxis ta = dataset.getVariables().get(0).getTimeAxis();
                 if ( ta != null ) {
                     if ( a == 0 ) {
                         timeStart = ta.getTimeCoverageStart();
@@ -550,7 +559,7 @@ public class Cleaner {
         properties.add(time);
 
         String name = "";
-        for ( Iterator varIt = data.getVariables().iterator(); varIt.hasNext(); ) {
+        for ( Iterator varIt = dataOne.getVariables().iterator(); varIt.hasNext(); ) {
             NetCDFVariable var = (NetCDFVariable) varIt.next();
             name = name + var.getName();
             if (varIt.hasNext()) name = name+"_";
@@ -598,7 +607,8 @@ public class Cleaner {
         }
         if ( p != null ) {
             for ( int i = 1; i < aggs.size(); i++ ) {
-                LeafNodeReference leafNodeReference = aggs.get(i);
+                Leaf l = aggs.get(i);
+                LeafNodeReference leafNodeReference = l.getLeafNodeReference();
                 p.removeContent(new UrlPathFilter(leafNodeReference.getUrlPath()));
             }
         }
@@ -669,37 +679,139 @@ public class Cleaner {
         service.setAttribute("serviceType", type);
         compoundService.addContent(service);
     }
-    private static Map<String, List<LeafNodeReference>> aggregate(String parent, List<LeafNodeReference> leaves) throws UnsupportedEncodingException {
-        Map<String, List<LeafNodeReference>> aggregates = new HashMap<String, List<LeafNodeReference>>();
+    private static Map<String, List<Leaf>> aggregate(String parent, List<LeafNodeReference> leaves) throws UnsupportedEncodingException {
+        Map<String, List<Leaf>> datasetGroups = new HashMap<String, List<Leaf>>();
         for ( Iterator<LeafNodeReference> leafIt = leaves.iterator(); leafIt.hasNext(); ) {
             LeafNodeReference leafNodeReference = leafIt.next();
             if ( leafNodeReference.getDataCrawlStatus() == DataCrawlStatus.FINISHED ) {
                 LeafDataset dataset = helper.getLeafDataset(parent, leafNodeReference.getUrl());
-                String signature = "";
                 if ( dataset != null ) { // Data set may be listed, but has not yet been crawled, but status should have caught this above
-                    List<NetCDFVariable> variables = dataset.getVariables();
-                    if ( variables != null ) {
-                        for ( Iterator<NetCDFVariable> varIt = variables.iterator(); varIt.hasNext(); ) {
-                            NetCDFVariable dsvar = varIt.next();
-                            signature = dsvar.getName() + dsvar.getRank() + dsvar.getxAxis() + dsvar.getyAxis();
-                            if ( dsvar.getTimeAxis() != null ) {
-                                signature = signature + dsvar.getTimeAxis();
-                            }
-                            if ( dsvar.getVerticalAxis() != null ) {
-                                signature = signature + dsvar.getVerticalAxis();
-                            }
-                        }
+                    String key = getAggregationSignature(dataset, false);
+                    List<Leaf> datasets  = datasetGroups.get(key);
+                    if ( datasets == null ) {
+                        datasets = new ArrayList<Leaf>();
+                        datasetGroups.put(key, datasets);
                     }
+                    datasets.add(new Leaf(leafNodeReference, dataset));
+
                 }
-                String key = JDOMUtils.MD5Encode(signature);
-                List<LeafNodeReference> datasets  = aggregates.get(key);
-                if ( datasets == null ) {
-                    datasets = new ArrayList<LeafNodeReference>();
-                    aggregates.put(key, datasets);
-                }
-                datasets.add(leafNodeReference);
             }
         }
-        return aggregates;
+        List<String> regroupKeys = new ArrayList<String>();
+        // Get each group and sort it by start date.
+        for ( Iterator groupsIt = datasetGroups.keySet().iterator(); groupsIt.hasNext(); ) {
+            String key = (String) groupsIt.next();
+            List<Leaf> l = (List<Leaf>) datasetGroups.get(key);
+            Collections.sort(l, new StartTimeComparator());
+            if ( containsDuplicates(l) ) {
+                regroupKeys.add(key);
+            }
+        }
+        // Regroup by longname if necessary.
+        Map<String, List<Leaf>> datasetsReGrouped = new HashMap<String,List<Leaf>>();
+
+        if ( regroupKeys.size() > 0 ) {
+            for ( Iterator keyIt = regroupKeys.iterator(); keyIt.hasNext(); ) {
+                String key = (String) keyIt.next();
+                List<Leaf> datasets = datasetGroups.get(key);
+                for ( Iterator dsIt = datasets.iterator(); dsIt.hasNext(); ) {
+                    Leaf l = (Leaf) dsIt.next();
+                    LeafDataset leafDataset = l.getLeafDataset();
+                    LeafNodeReference leafNodeReference = l.getLeafNodeReference();
+                    String regroupKey = getAggregationSignature(leafDataset, true);
+                    List<Leaf> regroupDatasets = datasetsReGrouped.get(key);
+                    if ( regroupDatasets == null ) {
+                        regroupDatasets = new ArrayList<Leaf>();
+                        datasetsReGrouped.put(regroupKey, regroupDatasets);
+                    }
+                    regroupDatasets.add(new Leaf(leafNodeReference, leafDataset));
+                }
+            }
+            for ( Iterator keyIt = regroupKeys.iterator(); keyIt.hasNext(); ) {
+                String key = (String) keyIt.next();
+                datasetGroups.remove(key);
+            }
+            for ( Iterator keyIt = datasetsReGrouped.keySet().iterator(); keyIt.hasNext(); ) {
+                String regroupKey = (String) keyIt.next();
+                datasetGroups.put(regroupKey, datasetsReGrouped.get(regroupKey));
+            }
+        }
+
+        // Fill the aggregates object and return it.
+        return datasetGroups;
     }
+    private static String getAggregationSignature(LeafDataset dataset, boolean longname) throws UnsupportedEncodingException {
+        
+        String startTime = String.valueOf(Math.random());
+        String signature = "";
+
+        List<NetCDFVariable> variables = dataset.getVariables();
+        if ( variables != null && variables.size() > 0 ) {
+            NetCDFVariable one = variables.get(0);
+            TimeAxis tone = one.getTimeAxis();
+
+            if ( tone != null ) {
+                startTime = tone.getTimeCoverageStart();
+            } else {
+                signature = signature + startTime;  // There is no time axis so there can be no aggregation, randomize the signature.
+            }
+            for ( Iterator<NetCDFVariable> varIt = variables.iterator(); varIt.hasNext(); ) {
+                NetCDFVariable dsvar = varIt.next();
+                if ( longname ) {
+                    signature = signature + dsvar.getLongName();
+                }
+                // toString for each axis object gives a summary that makes up the signature.
+                signature = signature + dsvar.getName() + dsvar.getRank() + dsvar.getxAxis() + dsvar.getyAxis(); 
+                if ( dsvar.getTimeAxis() != null ) {
+                    signature = signature + dsvar.getTimeAxis();
+                }
+                if ( dsvar.getVerticalAxis() != null ) {
+                    signature = signature + dsvar.getVerticalAxis();
+                }
+            }
+        }
+        return JDOMUtils.MD5Encode(signature);
+    }
+    private static boolean containsDuplicates(List<Leaf> datasets) {
+        List<String> startTimes = new ArrayList<String>();
+        for ( Iterator dsIt = datasets.iterator(); dsIt.hasNext(); ) {
+            Leaf leaf = (Leaf) dsIt.next();
+            LeafDataset dataset = leaf.getLeafDataset();
+            List<NetCDFVariable> variables = dataset.getVariables();
+            if ( variables != null && variables.size() > 0) {
+                NetCDFVariable var = variables.get(0);
+                TimeAxis t = var.getTimeAxis();
+                if ( t != null ) {
+                    String startTime = t.getTimeCoverageStart();
+                    if ( startTimes.contains(startTime) ) {
+                        return true;
+                    } else {
+                        startTimes.add(startTime);
+                    }
+                }
+            }
+        }
+        return false;   
+    }
+//    List<StringAttribute> attrs = dsvar.getStringAttributes();
+//    for ( Iterator attrsIt = attrs.iterator(); attrsIt.hasNext(); ) {
+//        StringAttribute attr = (StringAttribute) attrsIt.next();
+//        if ( attr.getName().equalsIgnoreCase("statistic") ) {
+//            String value = attr.getValue().get(0);
+//            if ( value.endsWith("M")) {
+//                System.out.println("Found one.");
+//            }
+//            if (value.contains("\n") ) value = value.split("\n")[0];
+//            if (value.contains("\r") ) value = value.split("\r")[0];
+//            signature = signature + value;
+//            System.out.println("Adding statistic: "+value);
+//        }
+//        if ( attr.getName().equalsIgnoreCase("level_desc") ) {
+//            String value = attr.getValue().get(0);
+//            if (value.contains("\n") ) value = value.split("\n")[0];
+//            signature = signature + value;
+//            System.out.println("Adding level_desc: "+value);
+//
+//        }
+//    }
 }

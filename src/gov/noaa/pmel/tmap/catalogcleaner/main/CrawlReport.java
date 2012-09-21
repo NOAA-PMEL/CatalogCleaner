@@ -80,7 +80,13 @@ public class CrawlReport {
                         scanned++;
                     }
                 }
-                System.out.println("Root has "+leaves.size()+" OPeNDAP datasets with "+scanned+" finished "+notscanned+" not started and "+failed+" failed.");
+                System.out.println("Root has: \n\t"+leaves.size()+" OPeNDAP datasets with "+scanned+" finished "+notscanned+" not started and "+failed+" failed.");
+                List<CatalogReference> refs = catalog.getCatalogRefs();
+                if ( refs != null && refs.size() > 0 ) {
+                    System.out.println("\t"+refs.size()+" sub-catalogs.");
+                } else {
+                    System.out.println("\t0 sub-catalogs.");
+                }
                 count = count + leaves.size();
             }
             count = count + report(count, level, catalog.getUrl(), catalog.getCatalogRefs());
@@ -105,29 +111,43 @@ public class CrawlReport {
         for ( Iterator iterator = refs.iterator(); iterator.hasNext(); ) {
             CatalogReference catalogReference = (CatalogReference) iterator.next();
             Catalog sub = helper.getCatalog(parent, catalogReference.getUrl());
-            List<LeafNodeReference> leaves = sub.getLeafNodes();
-            int failed = 0;
-            int notscanned = 0;
-            int scanned = 0;
-            for ( Iterator leafIt = leaves.iterator(); leafIt.hasNext(); ) {
-                LeafNodeReference leafNodeReference = (LeafNodeReference) leafIt.next();
-                if ( leafNodeReference.getDataCrawlStatus() == DataCrawlStatus.FAILED) {
-                    failed++;
-                } else if ( leafNodeReference.getDataCrawlStatus() == DataCrawlStatus.NOT_STARTED ) {
-                    notscanned++;
-                } else if ( leafNodeReference.getDataCrawlStatus() == DataCrawlStatus.FINISHED) {
-                    scanned++;
+            if ( sub !=  null ) {
+                List<LeafNodeReference> leaves = sub.getLeafNodes();
+                int failed = 0;
+                int notscanned = 0;
+                int scanned = 0;
+                for ( Iterator leafIt = leaves.iterator(); leafIt.hasNext(); ) {
+                    LeafNodeReference leafNodeReference = (LeafNodeReference) leafIt.next();
+                    if ( leafNodeReference.getDataCrawlStatus() == DataCrawlStatus.FAILED) {
+                        failed++;
+                    } else if ( leafNodeReference.getDataCrawlStatus() == DataCrawlStatus.NOT_STARTED ) {
+                        notscanned++;
+                    } else if ( leafNodeReference.getDataCrawlStatus() == DataCrawlStatus.FINISHED) {
+                        scanned++;
+                    }
                 }
-            }
-            if ( leaves != null && leaves.size() > 0 ) {
+                if ( leaves != null && leaves.size() > 0 ) {
+                    String blanks = "";
+                    for ( int i = 0; i < level;  i++ ) {
+                        blanks = blanks + "  ";
+                    }
+                    System.out.println(blanks+sub.getUrl()+" has:\n\t"+leaves.size()+" OPeNDAP datasets with "+scanned+" finished "+notscanned+" not started and "+failed+" failed.");
+                    total = total + leaves.size();
+                    List<CatalogReference> subrefs = sub.getCatalogRefs();
+                    if ( subrefs != null && subrefs.size() > 0 ) {
+                        System.out.println(blanks+"\t"+subrefs.size()+" sub-catalogs.");
+                    } else {
+                        System.out.println("\t0 sub-catalogs.");
+                    }
+                }
+                total = report(total, level, sub.getUrl(), sub.getCatalogRefs());
+            } else {
                 String blanks = "";
                 for ( int i = 0; i < level;  i++ ) {
                     blanks = blanks + "  ";
                 }
-                System.out.println(blanks+sub.getUrl()+" has "+leaves.size()+" OPeNDAP datasets with "+scanned+" finished "+notscanned+" not started and "+failed+" failed.");
-                total = total + leaves.size();
+                System.out.println(blanks+catalogReference.getUrl()+" is not in the database.");
             }
-            total = report(total, level, sub.getUrl(), sub.getCatalogRefs());
         }
         level++;
         return total;

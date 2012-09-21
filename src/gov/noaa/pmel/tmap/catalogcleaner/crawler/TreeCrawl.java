@@ -76,6 +76,7 @@ public class TreeCrawl implements Callable<TreeCrawlResult> {
             proxy.executeGetMethodAndStreamResult(url, stream);
         } catch ( Exception e ) {
             System.err.println("Failed to read "+url+" in thread "+Thread.currentThread().getId());
+            tx.commit();
             return new TreeCrawlResult(parent, url);
         }
         String xml = stream.toString();
