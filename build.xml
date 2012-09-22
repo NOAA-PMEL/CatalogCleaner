@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<project default="create_run_jar" name="Create Runnable Jar for Project CatalogCleaner5 with libraries in sub-folder">
+    <!--this file was created by Eclipse Runnable JAR Export Wizard-->
+    <!--ANT 1.7 is required                                        -->
+    <!-- Modified by me to build a tar from my Eclipse installation which can be relocated and run anywhere. -->
+        <property name="home" value="/home/rhs" />
+        <property name="workspace" value="Workspaces/MyEclipse/CatalogCleaner5"/>
+        <property name="temp_dir" value="/tmp/CatalogCleaner5"/>
+
+    <target name="create_run_jar">
+        <delete dir="${temp_dir}"/>
+        <mkdir dir="${temp_dir}/lib"/>
+        <jar destfile="${temp_dir}/cleaner5.jar">
+            <manifest>
+                <attribute name="Main-Class" value="gov.noaa.pmel.tmap.catalogcleaner.main.TreeCrawler"/>
+                <attribute name="Class-Path" value=". lib/datanucleus-rdbms-3.0.6.jar lib/datanucleus-api-jdo-3.0.5.jar lib/datanucleus-core-3.0.6.jar lib/datanucleus-enhancer-3.0.1.jar lib/asm-3.3.jar lib/jdo-api-3.1-SNAPSHOT-20110926.jar lib/commons-cli-1.2.jar lib/log4j-1.2.13.jar lib/mysql-connector-java-3.1.13-bin.jar lib/netcdfAll-4.2.jar lib/joda-convert-1.2.jar lib/joda-time-2.1.jar lib/jdom-2.0.2.jar lib/addXML.jar"/>
+            </manifest>
+            <fileset dir="${home}/Workspaces/MyEclipse/CatalogCleaner5/bin"/>
+        </jar>
+        <copy file="${home}/datanucleus-accessplatform-rdbms-3.0.6/lib/datanucleus-rdbms-3.0.6.jar" todir="${temp_dir}/lib"/>
+        <copy file="${home}/datanucleus-accessplatform-rdbms-3.0.6/lib/datanucleus-api-jdo-3.0.5.jar" todir="${temp_dir}/lib"/>
+        <copy file="${home}/datanucleus-accessplatform-rdbms-3.0.6/lib/datanucleus-core-3.0.6.jar" todir="${temp_dir}/lib"/>
+        <copy file="${home}/datanucleus-accessplatform-rdbms-3.0.6/lib/datanucleus-enhancer-3.0.1.jar" todir="${temp_dir}/lib"/>
+        <copy file="${home}/datanucleus-accessplatform-rdbms-3.0.6/deps/asm-3.3.jar" todir="${temp_dir}/lib"/>
+        <copy file="${home}/datanucleus-accessplatform-rdbms-3.0.6/deps/jdo-api-3.1-SNAPSHOT-20110926.jar" todir="${temp_dir}/lib"/>
+        <copy file="${home}/Workspaces/MyEclipse/CatalogCleaner5/lib/commons-cli-1.2.jar" todir="${temp_dir}/lib"/>
+        <copy file="${home}/Workspaces/MyEclipse/CatalogCleaner5/lib/log4j-1.2.13.jar" todir="${temp_dir}/lib"/>
+        <copy file="${home}/Workspaces/MyEclipse/CatalogCleaner5/lib/mysql-connector-java-3.1.13-bin.jar" todir="${temp_dir}/lib"/>
+        <copy file="${home}/Workspaces/MyEclipse/CatalogCleaner5/lib/netcdfAll-4.2.jar" todir="${temp_dir}/lib"/>
+        <copy file="${home}/Workspaces/MyEclipse/CatalogCleaner5/lib/joda-convert-1.2.jar" todir="${temp_dir}/lib"/>
+        <copy file="${home}/Workspaces/MyEclipse/CatalogCleaner5/lib/joda-time-2.1.jar" todir="${temp_dir}/lib"/>
+        <copy file="${home}/Workspaces/MyEclipse/CatalogCleaner5/lib/jdom-2.0.2.jar" todir="${temp_dir}/lib"/>
+        <copy file="${home}/Workspaces/MyEclipse/CatalogCleaner5/lib/addXML.jar" todir="${temp_dir}/lib"/>
+        <tar destfile="${home}/cleaner5.tar.gz" basedir="${temp_dir}" compression="gzip"/>
+        <delete dir="${temp_dir}"/>
+
+    </target>
+	<target name="jar">
+        <jar destfile="${home}/cleaner5.jar">
+            <manifest>
+                <attribute name="Main-Class" value="gov.noaa.pmel.tmap.catalogcleaner.main.TreeCrawler"/>
+                <attribute name="Class-Path" value=". lib/datanucleus-rdbms-3.0.6.jar lib/datanucleus-api-jdo-3.0.5.jar lib/datanucleus-core-3.0.6.jar lib/datanucleus-enhancer-3.0.1.jar lib/asm-3.3.jar lib/jdo-api-3.1-SNAPSHOT-20110926.jar lib/commons-cli-1.2.jar lib/log4j-1.2.13.jar lib/mysql-connector-java-3.1.13-bin.jar lib/netcdfAll-4.2.jar lib/joda-convert-1.2.jar lib/joda-time-2.1.jar lib/jdom-2.0.2.jar lib/addXML.jar"/>
+            </manifest>
+            <fileset dir="${home}/Workspaces/MyEclipse/CatalogCleaner5/bin"/>
+        </jar>
+	</target>
+</project>

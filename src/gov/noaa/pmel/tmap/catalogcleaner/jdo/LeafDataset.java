@@ -61,6 +61,21 @@ public class LeafDataset {
     public void setVariables(List<NetCDFVariable> variables) {
         this.variables = variables;
     }
+
+    public String getRepresentativeTime() {
+        if ( variables != null && variables.size() > 0 ) {
+            NetCDFVariable one = variables.get(0);
+            TimeAxis ta = one.getTimeAxis();
+            if ( ta != null ) {
+                return ta.getTimeCoverageStart();
+            } else {
+                return null;
+            }
+        } else {
+            return null;
+        }
+
+    }
     
 
 }

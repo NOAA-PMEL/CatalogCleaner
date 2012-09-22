@@ -14,6 +14,7 @@ import gov.noaa.pmel.tmap.catalogcleaner.jdo.TimeAxis;
 import gov.noaa.pmel.tmap.catalogcleaner.jdo.VerticalAxis;
 import gov.noaa.pmel.tmap.catalogcleaner.util.Leaf;
 import gov.noaa.pmel.tmap.catalogcleaner.util.StartTimeComparator;
+import gov.noaa.pmel.tmap.catalogcleaner.util.Util;
 import gov.noaa.pmel.tmap.cleaner.cli.CrawlerOptions;
 import gov.noaa.pmel.tmap.cleaner.xml.JDOMUtils;
 import gov.noaa.pmel.tmap.cleaner.xml.UrlPathFilter;
@@ -714,12 +715,19 @@ public class Cleaner {
             for ( Iterator keyIt = regroupKeys.iterator(); keyIt.hasNext(); ) {
                 String key = (String) keyIt.next();
                 List<Leaf> datasets = datasetGroups.get(key);
+                Set<String> fileKeys = findFileKeys(datasets);
                 for ( Iterator dsIt = datasets.iterator(); dsIt.hasNext(); ) {
                     Leaf l = (Leaf) dsIt.next();
                     LeafDataset leafDataset = l.getLeafDataset();
                     LeafNodeReference leafNodeReference = l.getLeafNodeReference();
-                    String regroupKey = getAggregationSignature(leafDataset, true);
-                    List<Leaf> regroupDatasets = datasetsReGrouped.get(key);
+                    String regroupKey = getAggregationSignature(leafDataset, false);  // Get rid of longname options since we're using file names?
+                    for ( Iterator iterator = fileKeys.iterator(); iterator.hasNext(); ) {
+                        String fkey = (String) iterator.next();
+                        if ( leafDataset.getUrl().contains(fkey) ) {
+                            regroupKey = regroupKey+fkey    ;
+                        }
+                    }
+                    List<Leaf> regroupDatasets = datasetsReGrouped.get(regroupKey);
                     if ( regroupDatasets == null ) {
                         regroupDatasets = new ArrayList<Leaf>();
                         datasetsReGrouped.put(regroupKey, regroupDatasets);
@@ -740,9 +748,30 @@ public class Cleaner {
         // Fill the aggregates object and return it.
         return datasetGroups;
     }
+    private static Set<String> findFileKeys(List<Leaf> datasets) {
+        Set<String> fileKeys = new HashSet<String>();
+        List<String> filenames = new ArrayList<String>();
+        String startTime = datasets.get(0).getLeafDataset().getRepresentativeTime();
+        filenames.add(datasets.get(0).getLeafDataset().getUrl());
+        for (int i = 1; i < datasets.size(); i++ ) {
+            LeafDataset data = datasets.get(i).getLeafDataset();
+            if ( data.getRepresentativeTime().equals(startTime) ) {
+                filenames.add(data.getUrl());
+            }
+        }
+        String base = filenames.get(0);
+        for ( int i = 1; i < filenames.size(); i++ ) {
+            fileKeys.addAll(Util.uniqueParts(base, filenames.get(i)));
+        }
+        
+        return fileKeys;
+    }
     private static String getAggregationSignature(LeafDataset dataset, boolean longname) throws UnsupportedEncodingException {
         
-        String startTime = String.valueOf(Math.random());
+        String startTime = dataset.getRepresentativeTime();
+        if ( startTime == null ) {
+            startTime = String.valueOf(Math.random());
+        }
         String signature = "";
 
         List<NetCDFVariable> variables = dataset.getVariables();
