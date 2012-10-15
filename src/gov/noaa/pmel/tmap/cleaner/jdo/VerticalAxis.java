@@ -1,12 +1,13 @@
 package gov.noaa.pmel.tmap.cleaner.jdo;
 
+import javax.jdo.annotations.Column;
 import javax.jdo.annotations.PersistenceCapable;
 import javax.jdo.annotations.Persistent;
 
 @PersistenceCapable
 public class VerticalAxis {
     @Persistent
-    String type;
+    private String type;
     
     @Persistent
     private String name;
@@ -48,7 +49,7 @@ public class VerticalAxis {
     private String isRegular;
     
     @Persistent
-    private String values;
+    private double[] values;
     
     
     
@@ -80,11 +81,11 @@ public class VerticalAxis {
         this.isRegular = String.valueOf(isRegular);
     }
 
-    public String getValues() {
+    public double[] getValues() {
         return values;
     }
 
-    public void setValues(String values) {
+    public void setValues(double[] values) {
         this.values = values;
     }
 

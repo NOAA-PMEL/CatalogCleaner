@@ -2,6 +2,7 @@ package gov.noaa.pmel.tmap.cleaner.main;
 
 import gov.noaa.pmel.tmap.cleaner.cli.CrawlerOptions;
 import gov.noaa.pmel.tmap.cleaner.crawler.DataCrawl;
+import gov.noaa.pmel.tmap.cleaner.crawler.DataCrawlCatalog;
 import gov.noaa.pmel.tmap.cleaner.jdo.Catalog;
 import gov.noaa.pmel.tmap.cleaner.jdo.CatalogReference;
 import gov.noaa.pmel.tmap.cleaner.jdo.PersistenceHelper;
@@ -93,10 +94,10 @@ public class DataCrawler {
                 DataCrawl dataCrawl;
                 if ( url == null ) {
                     rootCatalog = helper.getCatalog(root, root);
-                    dataCrawl = new DataCrawl(properties, root, root, force);
+                    dataCrawl = new DataCrawlCatalog(properties, root, root, force);
                 } else {
                     rootCatalog = helper.getCatalog(root, url);
-                    dataCrawl = new DataCrawl(properties, root, url, force);
+                    dataCrawl = new DataCrawlCatalog(properties, root, url, force);
                 }
                 futures = new ArrayList<Future<String>>();
                 Future<String> future = pool.submit(dataCrawl);
@@ -137,7 +138,7 @@ public class DataCrawler {
             CatalogReference catalogReference = (CatalogReference) refsIt.next();
             Catalog sub = helper.getCatalog(parent, catalogReference.getUrl());
             if ( sub != null ) {
-                DataCrawl dataCrawl = new DataCrawl(properties, sub.getParent(), sub.getUrl(), force);
+                DataCrawl dataCrawl = new DataCrawlCatalog(properties, sub.getParent(), sub.getUrl(), force);
                 Future<String> future = pool.submit(dataCrawl);
                 futures.add(future);
                 processReferences(sub.getUrl(), sub.getCatalogRefs());

@@ -79,10 +79,11 @@ public class Proxy {
 	 * Makes HTTP GET request and writes result to response output stream.
 	 * @param request fully qualified request URL.
 	 * @param output OutputStream to write to
+	 * @throws Exception 
 	 * @throws IOException
 	 * @throws HttpException
 	 */
-	public void executeGetMethodAndStreamResult(String request, OutputStream output) throws IOException, HttpException {
+	public void executeGetMethodAndStreamResult(String request, OutputStream output) throws Exception {
 
 		HttpClient client = new HttpClient();
 
@@ -104,6 +105,8 @@ public class Proxy {
 			}
 
 			streamGetMethodResponse(method,output);
+		} catch (Exception e){
+		    throw (e);
 		}
 		finally {
 

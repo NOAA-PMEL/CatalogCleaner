@@ -15,6 +15,7 @@ import javax.jdo.PersistenceManager;
 import gov.noaa.pmel.tmap.cleaner.cli.CrawlerOptions;
 import gov.noaa.pmel.tmap.cleaner.jdo.Catalog;
 import gov.noaa.pmel.tmap.cleaner.jdo.CatalogReference;
+import gov.noaa.pmel.tmap.cleaner.jdo.CatalogXML;
 import gov.noaa.pmel.tmap.cleaner.jdo.LeafNodeReference;
 import gov.noaa.pmel.tmap.cleaner.jdo.PersistenceHelper;
 import gov.noaa.pmel.tmap.cleaner.jdo.LeafNodeReference.DataCrawlStatus;
@@ -59,6 +60,10 @@ public class CrawlReport {
             PersistenceManager persistenceManager = pmf.getPersistenceManager();
             helper = new PersistenceHelper(persistenceManager);
             Catalog catalog = helper.getCatalog(root, root);
+            CatalogXML catalogXML = helper.getCatalogXML(root);
+            if ( catalogXML == null ) {
+                System.out.println("XML null for "+root);
+            }
             System.out.println("Report for "+root);
             if ( catalog == null ) {
                 System.out.println("No catalog report for "+root+" in "+database);
@@ -113,6 +118,10 @@ public class CrawlReport {
         for ( Iterator iterator = refs.iterator(); iterator.hasNext(); ) {
             CatalogReference catalogReference = (CatalogReference) iterator.next();
             Catalog sub = helper.getCatalog(parent, catalogReference.getUrl());
+            CatalogXML subXML = helper.getCatalogXML(catalogReference.getUrl());
+            if ( subXML == null ) {
+                System.out.println("XML null for "+ catalogReference.getUrl());
+            }
             if ( sub !=  null ) {
                 List<LeafNodeReference> leaves = sub.getLeafNodes();
                 int failed = 0;

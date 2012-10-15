@@ -1,9 +1,9 @@
 package gov.noaa.pmel.tmap.cleaner.jdo;
 
-import java.util.Enumeration;
 import java.util.List;
 
 import javax.jdo.annotations.Column;
+import javax.jdo.annotations.IdGeneratorStrategy;
 import javax.jdo.annotations.PersistenceCapable;
 import javax.jdo.annotations.Persistent;
 

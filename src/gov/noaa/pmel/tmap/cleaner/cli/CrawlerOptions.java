@@ -10,7 +10,7 @@ public class CrawlerOptions extends Options {
     private static final long serialVersionUID = 8161908636390601749L;
 
     public CrawlerOptions() {
-        Option root = new Option("r", "root", true, "The root URL for this tree crawl.");
+        Option root = new Option("r", "root", true, "The root or parent URL.");
         root.setRequired(true);
         addOption(root);
         Option exclude = new Option("x", "exclude", true, "Regular expression of URLs to exclude.");
@@ -27,5 +27,7 @@ public class CrawlerOptions extends Options {
         addOption(url);
         Option force = new Option("f", "force", false, "Download everything again (catalogs and/or netCDF data) regardless of the status of the previous crawl.");
         addOption(force);
+        Option leaf = new Option("l", "leaf", true, "The OPeNDAP URL of a leaf node.");
+        addOption(leaf);
     }
 }

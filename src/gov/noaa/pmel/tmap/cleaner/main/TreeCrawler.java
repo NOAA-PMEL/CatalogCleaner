@@ -77,7 +77,7 @@ public class TreeCrawler {
                 if ( connectionURL.contains("database") ) {
                     connectionURL = connectionURL.replace("database", "");
                 } else {
-                    System.err.println("The conenctionURL string should use the name \"databast\" which will be substituted for each catalog" );
+                    System.err.println("The conenctionURL string should use the name \"databast\" which will be substituted for with the name from the command line." );
                     System.exit(-1);
                 }
                 String connectionUser = properties.getProperty("datanucleus.ConnectionUserName");
@@ -92,7 +92,7 @@ public class TreeCrawler {
                 if ( database == null ) {
                     database = "cc_"+tag;
                 }
-                
+               
                 s.executeUpdate("CREATE DATABASE IF NOT EXISTS "+database);
                 connectionURL = connectionURL + database;
                 properties.setProperty("datanucleus.ConnectionURL", connectionURL);
@@ -146,7 +146,9 @@ public class TreeCrawler {
         for ( Iterator futureIt = futures.iterator(); futureIt.hasNext(); ) {
             Future<TreeCrawlResult> future = (Future<TreeCrawlResult>) futureIt.next();
             TreeCrawlResult result = future.get();
+           
             Catalog catalog = helper.getCatalog(result.getParent(), result.getUrl());
+
             if ( catalog != null && !catalog.hasBestTimeSeries() ) {
                 List<CatalogReference> refs = catalog.getCatalogRefs();
                 List<CatalogReference> remove = new ArrayList();
@@ -167,6 +169,8 @@ public class TreeCrawler {
                     futureChildren.add(futureChild);
                 }
                 saveAndProcessChildren(futureChildren);
+            } else {
+                if ( catalog == null ) System.out.println("Future task: "+result.getParent()+" sub-catalog: "+result.getUrl()+" was null when processing children.");
             }
         }
        

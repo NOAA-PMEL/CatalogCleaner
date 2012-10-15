@@ -62,57 +62,27 @@ import ucar.unidata.geoloc.projection.UtmCoordinateConversion;
 import ucar.unidata.geoloc.projection.UtmProjection;
 import ucar.unidata.geoloc.projection.VerticalPerspectiveView;
 
-public class DataCrawl implements Callable<String> {
+public abstract class DataCrawl implements Callable<String> {
     String parent;
     String url;
+    String leafurl;
     PersistenceHelper helper;
     boolean force = false;
-    public DataCrawl(Properties properties, String parent, String url, boolean force) {
+    public DataCrawl(Properties properties, String parent, String url, String leafurl, boolean force) {
         super();
         this.parent = parent;
         this.url = url;
+        this.leafurl = leafurl;
         this.force = force;
         JDOPersistenceManagerFactory pmf = (JDOPersistenceManagerFactory) JDOHelper.getPersistenceManagerFactory(properties);
         PersistenceManager persistenceManager = pmf.getPersistenceManager();
         helper = new PersistenceHelper(persistenceManager);
     }
+    
     @Override
-    public String call() throws Exception {
-        Transaction tx = helper.getTransaction();
-        tx.begin();
-        Catalog catalog = helper.getCatalog(parent, url);
-        tx.commit();
-        List<LeafNodeReference> leaves = catalog.getLeafNodes();
-        for ( Iterator iterator = leaves.iterator(); iterator.hasNext(); ) {
-            LeafNodeReference leafNodeReference = (LeafNodeReference) iterator.next();
-            if ( leafNodeReference.getDataCrawlStatus() != DataCrawlStatus.FINISHED || force ) {
-                System.out.println("Crawling "+leafNodeReference.getUrl()+" in thread "+Thread.currentThread().getId());
-                tx.begin();
-                try {
-                    crawlLeafNode(catalog.getUrl(), leafNodeReference.getUrl());
-                    leafNodeReference.setDataCrawlStatus(DataCrawlStatus.FINISHED);
-                    leafNodeReference.setCrawlDate(DateTime.now().toString("yyyy-MM-dd HH:mm:ss"));
-                } catch ( Exception e ) {
-                    System.err.println("Failed to save "+catalog.getUrl()+"\n\t"+leafNodeReference.getUrl()+"\n\t for "+e.getLocalizedMessage());
-                    leafNodeReference.setDataCrawlStatus(DataCrawlStatus.FAILED);
-                }
-                tx.commit();
-            } else {
-                System.out.println("Already crawled "+leafNodeReference.getUrl()+" in thread "+Thread.currentThread().getId());
-                LeafDataset data = helper.getLeafDataset(catalog.getUrl(), leafNodeReference.getUrl());
-                if ( data == null ) {
-                    tx.begin();
-                    System.out.println("\t Data null, recrawling "+leafNodeReference.getUrl()+" in thread "+Thread.currentThread().getId());
-                    crawlLeafNode(catalog.getUrl(), leafNodeReference.getUrl());
-                    leafNodeReference.setDataCrawlStatus(DataCrawlStatus.FINISHED);
-                    leafNodeReference.setCrawlDate(DateTime.now().toString("yyyy-MM-dd HH:mm:ss"));
-                    tx.commit();
-                }
-            }
-        }
-        return url;
-    }
-    private void crawlLeafNode(String parent, String url) throws Exception {
+    public abstract String call() throws Exception; 
+    
+    protected void crawlLeafNode(String parent, String url) throws Exception {
         LeafDataset leaf = helper.getLeafDataset(parent, url);
         final CatalogComment cancelMessage = new CatalogComment();
         if ( leaf == null || force ) {
@@ -125,7 +95,7 @@ public class DataCrawl implements Callable<String> {
                 CancelTask cancelTask = new CancelTask() {
                     long starttime = System.currentTimeMillis();
                     public boolean isCancel() {
-                        if(System.currentTimeMillis() > starttime + 5*60*1000) // currently set to 5 minutes
+                        if(System.currentTimeMillis() > starttime + 2*60*1000) // currently set to 2 minutes
                             return true;
                         return false;
                     }
@@ -141,24 +111,51 @@ public class DataCrawl implements Callable<String> {
                     leaf.setComment(cancelMessage);
                 }
                 List<GridDatatype> grids = gridDs.getGrids();
+                if ( grids.size() <= 0 ) {
+                    gridDs = (GridDataset) FeatureDatasetFactoryManager.open(FeatureType.FMRC, url, cancelTask, null);
+                    grids = gridDs.getGrids();
+
+                }
                 String toEncode = "";
                 List<NetCDFVariable> vars = new ArrayList<NetCDFVariable>();
                 for(int i = 0; i<grids.size(); i++){
+                    System.out.println("Variable crawling "+grids.get(i).getName()+" "+grids.get(i).getDescription());
+
                     NetCDFVariable var = crawlNewVariable(grids.get(i));
                     if ( var != null ) {
+                        System.out.println("Adding "+var.getName()+" "+var.getDescription());
                         vars.add(var);
                     }
                 }
                 leaf.setVariables(vars);
             } catch (Exception e) {
+                System.err.println("netCDF variable crawling halted with "+e.getLocalizedMessage());
+
                 CatalogComment comment = new CatalogComment();
                 comment.setComment(e.getMessage());
                 leaf.setComment(comment);
             }
             catch (Error e) {
+                System.err.println("netCDF variable crawling halted with "+e.getLocalizedMessage());
+
                 CatalogComment comment = new CatalogComment();
                 comment.setComment(e.getMessage());
                 leaf.setComment(comment);
+            }
+        }
+        List<NetCDFVariable> variables = leaf.getVariables();
+        if ( variables != null ) {
+            for ( Iterator varIt = variables.iterator(); varIt.hasNext(); ) {
+                NetCDFVariable netCDFVariable = (NetCDFVariable) varIt.next();
+                System.out.println("\tNetCDFVariable: "+netCDFVariable.getDescription());
+                GeoAxis x = netCDFVariable.getxAxis();
+                System.out.println("\t\tX-Axis: "+x.getName()+" "+x.getMinValue()+" "+x.getMaxValue());
+                GeoAxis y = netCDFVariable.getyAxis();
+                System.out.println("\t\tY-Axis: "+y.getName()+" "+y.getMinValue()+" "+y.getMaxValue());
+                VerticalAxis z = netCDFVariable.getVerticalAxis();
+                if ( z != null ) System.out.println("\t\tZ-Axis: "+z.getName()+" "+z.getMinValue()+" "+z.getMaxValue());
+                TimeAxis t = netCDFVariable.getTimeAxis();
+                if ( t != null ) System.out.println("\t\tT-Axis: "+t.getTimeCoverageStart()+" "+t.getTimeCoverageEnd());
             }
         }
         // Else already have this saved...
@@ -308,6 +305,7 @@ public class DataCrawl implements Callable<String> {
                 timeAxis.setMaxValue(maxvalue);
             } catch ( Exception e) {
                 // This is not a double valued axis.  We're skipping it for now.  :-)
+                System.err.println("Returning a null variable because of "+e.getLocalizedMessage());
                 return null;
             }
             timeAxis.setSize(tAxis.getSize());  
@@ -357,11 +355,7 @@ public class DataCrawl implements Callable<String> {
                 zAxis.setResolution(coordAxis.getIncrement());
             } else {
                 double v[] = coordAxis.getCoordValues();
-                String values = "";
-                for ( int i = 0; i < v.length; i++ ) {
-                    values = values + v[i] + " ";
-                }
-                zAxis.setValues(values.trim());
+                zAxis.setValues(v);
             }
             var.setVerticalAxis(zAxis);
         }
@@ -372,6 +366,7 @@ public class DataCrawl implements Callable<String> {
             yAxis = makeGeoAxis("y", yCoordAxis);
             var.setyAxis(yAxis);
         } catch ( Exception e ) {
+            System.err.println("Returning a null variable because of "+e.getLocalizedMessage());
             return null;
         }
        
@@ -381,6 +376,7 @@ public class DataCrawl implements Callable<String> {
             xAxis = makeGeoAxis("x", xCoordAxis);
             var.setxAxis(xAxis);
         } catch (Exception e) {
+            System.err.println("Returning a null variable because of "+e.getLocalizedMessage());
             return null;
         }
     

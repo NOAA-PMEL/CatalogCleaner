@@ -7,7 +7,7 @@ import javax.jdo.annotations.Persistent;
 public class GeoAxis {
     
     @Persistent
-    String type;
+    private String type;
     
     @Persistent
     private String name;

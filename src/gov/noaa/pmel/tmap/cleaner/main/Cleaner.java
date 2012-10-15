@@ -152,7 +152,7 @@ public class Cleaner {
             System.err.println( e.getMessage() );
             HelpFormatter formatter = new HelpFormatter();
             formatter.setWidth(width);
-            formatter.printHelp("TreeCrawler", crawlerOptions, true);
+            formatter.printHelp("Cleaner", crawlerOptions, true);
             System.exit(-1);
 
         } catch ( FileNotFoundException e ) {
@@ -175,6 +175,7 @@ public class Cleaner {
             Catalog catalog = helper.getCatalog(url, catalogReference.getUrl());
             CatalogXML catalogXML = helper.getCatalogXML(catalogReference.getUrl());
             if ( catalog == null || catalogXML == null ) {
+                System.out.println("Found empty catalog for: "+catalogReference.getUrl()+" in "+url);
                 writeEmptyCatalog(url, catalogReference.getUrl());   
             } else {
                 clean(catalogXML, catalog);    
@@ -192,12 +193,18 @@ public class Cleaner {
         if ( xml != null && xml.length() > 0 ) {
             JDOMUtils.XML2JDOM(xml, doc);
             if ( catalog.getLeafNodes() != null && catalog.getLeafNodes().size() > 0 ) {
-
-                // Remove the services
-                removeRemoteServices(doc);  
-                addLocalServices(doc);
-
+                
                 List<LeafNodeReference> leaves = catalog.getLeafNodes();
+                
+                // This is a huge risk.  Use the first one, we'll see what happens...
+                String path = leaves.get(0).getUrlPath();
+                String url = leaves.get(0).getUrl();
+                String remoteBase = url.replace(path, "");
+                // Remove the services
+                Set<String> removed = removeRemoteServices(doc);  
+                addLocalServices(doc, remoteBase, removed);
+
+              
                 Map<String, List<Leaf>> aggregates = aggregate(catalog.getUrl(), leaves);
 
                 for ( Iterator<String> aggIt = aggregates.keySet().iterator(); aggIt.hasNext(); ) {
@@ -303,17 +310,20 @@ public class Cleaner {
         }
         element.getChildren().removeAll(remove);
     }
-    private static void remove(Document doc, String element) {
+    private static List<Element> remove(Document doc, String element) {
+        List<Element> removed = new ArrayList<Element>();
         Iterator removeIt = doc.getDescendants(new ElementFilter(element));
         Set<Parent> parents = new HashSet<Parent>();
         while ( removeIt.hasNext() ) {
             Element ref = (Element) removeIt.next();
+            removed.add(ref);
             parents.add(ref.getParent());
         }
         for ( Iterator parentIt = parents.iterator(); parentIt.hasNext(); ) {
             Parent parent = (Parent) parentIt.next();
             parent.removeContent(new ElementFilter(element));
         }
+        return removed;
     }
     private static void addNCML(Document doc, String parent, List<Leaf> aggs) throws MalformedURLException {
 
@@ -469,9 +479,17 @@ public class Cleaner {
                 geospatialCoverage.addContent(updown);
                 Element property = new Element("property", ns);
                 property.setAttribute("name", "updownValues");
-                String vs = vert.getValues();
-                if ( vs == null ) vs = "NULL Values";
-                property.setAttribute("value", vs);
+                double[] vs = vert.getValues();
+                String values = "";
+
+                if ( vs == null ) {
+                    values = "NULL Values";
+                } else {
+                    for ( int i = 0; i < vs.length; i++ ) {
+                        values = values + String.valueOf(vs[i]) + " ";
+                    }
+                }
+                property.setAttribute("value", values.trim());
                 properties.add(property);
                 String hasZ = "";
                 for ( Iterator varIt = dataOne.getVariables().iterator(); varIt.hasNext(); ) {
@@ -510,7 +528,12 @@ public class Cleaner {
 
             }
         } else {
-            System.err.println("Data node information is null for "+parent+" ... "+leafNode.getUrl());
+            if ( dataOne == null ) {
+                System.err.println("Data node information is null for "+parent+" ... "+leafNode.getUrl());
+            }
+            if ( dataOne.getVariables().size() == 0 ) {
+                System.err.println("Data node has no data variables "+parent+" ... "+leafNode.getUrl());
+            }
             return;
         }
         String timeStart = "";
@@ -636,8 +659,9 @@ public class Cleaner {
             matchingDataset.addContent(ncml);
         }
     }
-    private static void removeRemoteServices(Document doc ) {
-        remove(doc, "service");
+    private static Set<String> removeRemoteServices(Document doc ) {
+        Set<String> removedTypes = new HashSet<String>();
+        List<Element> removedServiceElements = remove(doc, "service");
         remove(doc, "serviceName");
         Iterator<Element> metaIt = doc.getRootElement().getDescendants(new ElementFilter("metadata"));
         List<Parent> parents = new ArrayList<Parent>();
@@ -652,18 +676,50 @@ public class Cleaner {
             Parent parent = (Parent) parentIt.next();
             parent.removeContent(new ElementFilter("metadata"));
         }
+        for ( Iterator servIt = removedServiceElements.iterator(); servIt.hasNext(); ) {
+            Element service = (Element) servIt.next();
+            String type = service.getAttributeValue("serviceType").toUpperCase();
+            if ( !type.equals("COMPOUND") ) {
+                removedTypes.add(type);
+            }
+        }
+        return removedTypes;
     }
-    private static void addLocalServices(Document doc) {
+    private static void addLocalServices(Document doc, String remoteServiceBase, Set<String> remoteTypes) {
         Element service = new Element("service", ns);
         service.setAttribute("name", threddsServerName+"_compound");
         service.setAttribute("serviceType", "compound");
         service.setAttribute("base", "");
-        addService(service, "wms", "WMS");
-        addService(service, "wcs", "WCS");
-        addService(service, "ncml", "NCML");
-        addService(service, "iso", "ISO");
-        addService(service, "uddc", "UDDC");
-        addService(service, "dodsC", "OPeNDAP");
+        if ( remoteTypes.contains("WMS") ) {
+            addFullService(service, remoteServiceBase, "WMS");
+        } else {
+            addService(service, "wms", "WMS");
+        }
+        if ( remoteTypes.contains("WCS") ) {
+            addFullService(service, remoteServiceBase, "WCS");
+        } else {
+            addService(service, "wcs", "WCS");
+        }
+        if ( remoteTypes.contains("NCML") ) {
+            addFullService(service, remoteServiceBase, "NCML");
+        } else {
+            addService(service, "ncml", "NCML");
+        }
+        if ( remoteTypes.contains("ISO") ) {
+            addFullService(service, remoteServiceBase, "ISO");
+        } else {
+            addService(service, "iso", "ISO");
+        }
+        if ( remoteTypes.contains("UDDC") ) {
+            addFullService(service, remoteServiceBase, "UDDC");
+        } else {
+            addService(service, "uddc", "UDDC");
+        }
+        if ( remoteTypes.contains("OPENDAP") ) {
+            addFullService(service, remoteServiceBase, "OPENDAP");
+        } else {
+            addService(service, "dodsC", "OPeNDAP");
+        }
         // Put this at the top of the document in index 0.
         doc.getRootElement().addContent(0, service);
     }
@@ -677,6 +733,13 @@ public class Cleaner {
         fullbase = fullbase + base;
         if ( !fullbase.endsWith("/") ) fullbase = fullbase + "/";
         service.setAttribute("base", fullbase);
+        service.setAttribute("serviceType", type);
+        compoundService.addContent(service);
+    }
+    private static void addFullService(Element compoundService, String base, String type) {
+        Element service = new Element("service", ns);
+        service.setAttribute("name", base+"_"+type);
+        service.setAttribute("base", base);
         service.setAttribute("serviceType", type);
         compoundService.addContent(service);
     }
@@ -798,6 +861,9 @@ public class Cleaner {
                     signature = signature + dsvar.getVerticalAxis();
                 }
             }
+        } else {
+            // I don't know what the heck we're going to do with this data set since there are no variables, but we sure as heck ain't going to aggregate it.
+            signature = String.valueOf(Math.random());
         }
         return JDOMUtils.MD5Encode(signature);
     }

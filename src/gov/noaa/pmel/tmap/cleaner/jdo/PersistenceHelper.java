@@ -46,7 +46,9 @@ public class PersistenceHelper {
             List<CatalogXML> results = (List<CatalogXML>) query.execute();
             catalogXML = results.get(0);
         } catch (Exception e) {
-            // S'ok, we'll take the null value.
+            
+            System.out.println("Error getting XML for "+url+" was "+e);
+
         }
         return catalogXML;
     }

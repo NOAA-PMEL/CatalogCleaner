@@ -1,5 +1,7 @@
 package gov.noaa.pmel.tmap.cleaner.jdo;
 
+import java.util.List;
+
 import javax.jdo.annotations.Column;
 import javax.jdo.annotations.PersistenceCapable;
 import javax.jdo.annotations.Persistent;
@@ -35,7 +37,7 @@ public class LeafNodeReference {
         this.urlPath = urlPath;
         this.dataCrawlStatus = status;
     }
-
+    
     public String getUrlPath() {
         return urlPath;
     }

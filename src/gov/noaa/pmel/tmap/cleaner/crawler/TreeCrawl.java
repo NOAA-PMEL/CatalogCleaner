@@ -5,15 +5,14 @@ import gov.noaa.pmel.tmap.cleaner.jdo.Catalog;
 import gov.noaa.pmel.tmap.cleaner.jdo.CatalogReference;
 import gov.noaa.pmel.tmap.cleaner.jdo.CatalogXML;
 import gov.noaa.pmel.tmap.cleaner.jdo.LeafNodeReference;
-import gov.noaa.pmel.tmap.cleaner.jdo.PersistenceHelper;
 import gov.noaa.pmel.tmap.cleaner.jdo.LeafNodeReference.DataCrawlStatus;
+import gov.noaa.pmel.tmap.cleaner.jdo.PersistenceHelper;
 import gov.noaa.pmel.tmap.cleaner.util.Util;
 import gov.noaa.pmel.tmap.cleaner.xml.JDOMUtils;
 
 import java.io.ByteArrayOutputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.net.URL;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -32,8 +31,6 @@ import org.jdom2.Element;
 import org.jdom2.Namespace;
 import org.jdom2.Parent;
 import org.jdom2.filter.ElementFilter;
-import org.jdom2.xpath.XPathHelper;
-
 
 import thredds.catalog.InvAccess;
 import thredds.catalog.InvCatalog;
@@ -62,67 +59,93 @@ public class TreeCrawl implements Callable<TreeCrawlResult> {
     public TreeCrawlResult call() throws Exception {
         Transaction tx = helper.getTransaction();
         tx.begin();
-        this.catalog = helper.getCatalog(parent, url);
-        this.catalogXML = helper.getCatalogXML(url);
-        if ( catalog == null ) {
-            catalog = new Catalog();
-            helper.save(catalog);
-        }
-        catalog.setParent(parent);
-        catalog.setUrl(url);
-        System.out.println("Downloading "+url+" in thread "+Thread.currentThread().getId());
-        ByteArrayOutputStream stream = new ByteArrayOutputStream();
+        System.out.println("Begin transaction in "+Thread.currentThread().getId());
         try {
-            proxy.executeGetMethodAndStreamResult(url, stream);
-        } catch ( Exception e ) {
-            System.err.println("Failed to read "+url+" in thread "+Thread.currentThread().getId());
-            tx.commit();
-            return new TreeCrawlResult(parent, url);
-        }
-        String xml = stream.toString();
-        if ( catalogXML == null ) {
-            catalogXML = new CatalogXML();
-            catalogXML.setUrl(url);
-            helper.save(catalogXML);
-        } else {
-            if ( catalogXML != null ) {
+            this.catalog = helper.getCatalog(parent, url);
+            this.catalogXML = helper.getCatalogXML(url);
+            if ( catalog == null ) {
+                catalog = new Catalog();
+                catalog.setParent(parent);
+                catalog.setUrl(url);
+                helper.save(catalog);
+                catalogXML = null;
+            }
+            System.out.println("Downloading "+url+" in thread "+Thread.currentThread().getId());
+            ByteArrayOutputStream stream = new ByteArrayOutputStream();
+            try {
+                proxy.executeGetMethodAndStreamResult(url, stream);
+            } catch ( Exception e ) {
+                System.err.println("Failed to read "+url+" in thread "+Thread.currentThread().getId());
+                System.out.println("Commit transaction after read error in "+Thread.currentThread().getId());
+                tx.commit();
+                return new TreeCrawlResult(parent, url);
+            }
+            String xml = stream.toString();
+            if ( catalogXML == null ) {
+                catalogXML = new CatalogXML();
+                catalogXML.setUrl(url);
+                catalogXML.setXml(xml);
+                System.out.println("Setting new XML for: " + url+" in "+Thread.currentThread().getId());
+                helper.save(catalogXML);
+            } else {
                 String oldxml = catalogXML.getXml();
-                if ( oldxml != null && oldxml.equals(xml) ) {
-                    return new TreeCrawlResult(parent, url);
+                if ( oldxml != null ) {
+                    if ( oldxml.equals(xml) ) {
+                        tx.rollback();
+                        System.out.println("Using existing xml for: " + url+" in "+Thread.currentThread().getId());
+                        return new TreeCrawlResult(parent, url);
+                    } else if ( !oldxml.equals(xml) ) {
+                        System.out.println("Old XML not equal, using new for: " + url+" in "+Thread.currentThread().getId());
+                        catalogXML.setXml(xml);
+                    }
+                } else  {
+                    System.out.println("Old is null: " + url+" in "+Thread.currentThread().getId());
+                    catalogXML.setXml(xml);
                 }
             }
+            Document doc = new Document();
+            JDOMUtils.XML2JDOM(xml, doc);
+            Element rootElement = doc.getRootElement();
+            String version = rootElement.getAttributeValue("version");
+            if(version != null){
+                catalog.setVersion(version);
+            }
+            List<CatalogReference> refs = new ArrayList<CatalogReference>();
+            refs = findCatalogRefs(url, rootElement, refs);
+            catalog.setCatalogRefs(refs);
+            List<LeafNodeReference> accessDatasets = new ArrayList<LeafNodeReference>();
+            Iterator removeIt = doc.getDescendants(new ElementFilter("catalogRef"));
+            Set<Parent> parents = new HashSet<Parent>();
+            while ( removeIt.hasNext() ) {
+                Element ref = (Element) removeIt.next();
+                parents.add(ref.getParent());
+            }
+            for ( Iterator parentIt = parents.iterator(); parentIt.hasNext(); ) {
+                Parent parent = (Parent) parentIt.next();
+                parent.removeContent(new ElementFilter("catalogRef"));
+            }
+            accessDatasets = findAccessDatasets(url, doc, accessDatasets);
+            catalog.setLeafNodes(accessDatasets);
+            catalog.setHasBestTimeSeries(bestTime);
+            if ( bestTime ) {
+                catalog.setCatalogRefs(new ArrayList<CatalogReference>());
+            }
+            System.out.println("Commit transaction after normal processing in "+Thread.currentThread().getId());
+            if ( url.contains("fall")) {
+                System.out.println("NY XML for "+url+" = "+catalogXML.getXml());
+            }
+            tx.commit();
+            System.out.println("Finished with "+url+" in thread "+Thread.currentThread().getId());
+            return new TreeCrawlResult(parent, url);
+        } catch ( Exception e ) {
+            
+            if ( tx.isActive() ) {
+                System.out.println("Commit active transaction during expection processing in "+Thread.currentThread().getId());
+                tx.commit();
+            }
+            System.err.println("Failed processing "+url+"with message "+e.getMessage()+" in thread "+Thread.currentThread().getId());
+            return new TreeCrawlResult(parent, url);
         }
-        catalogXML.setXml(xml);
-        Document doc = new Document();
-        JDOMUtils.XML2JDOM(xml, doc);
-        Element rootElement = doc.getRootElement();
-        String version = rootElement.getAttributeValue("version");
-        if(version != null){
-            catalog.setVersion(version);
-        }
-        List<CatalogReference> refs = new ArrayList<CatalogReference>();
-        refs = findCatalogRefs(url, rootElement, refs);
-        catalog.setCatalogRefs(refs);
-        List<LeafNodeReference> accessDatasets = new ArrayList<LeafNodeReference>();
-        Iterator removeIt = doc.getDescendants(new ElementFilter("catalogRef"));
-        Set<Parent> parents = new HashSet<Parent>();
-        while ( removeIt.hasNext() ) {
-            Element ref = (Element) removeIt.next();
-            parents.add(ref.getParent());
-        }
-        for ( Iterator parentIt = parents.iterator(); parentIt.hasNext(); ) {
-            Parent parent = (Parent) parentIt.next();
-            parent.removeContent(new ElementFilter("catalogRef"));
-        }
-        accessDatasets = findAccessDatasets(url, doc, accessDatasets);
-        catalog.setLeafNodes(accessDatasets);
-        catalog.setHasBestTimeSeries(bestTime);
-        if ( bestTime ) {
-            catalog.setCatalogRefs(new ArrayList<CatalogReference>());
-        }
-        tx.commit();
-        System.out.println("Finished with "+url+" in thread "+Thread.currentThread().getId());
-        return new TreeCrawlResult(parent, url);
     }
     private static List<CatalogReference> findCatalogRefs(String originalUrl, Element element, List<CatalogReference> catalogUrls) throws Exception {
         
