@@ -1,36 +1,34 @@
 package gov.noaa.pmel.tmap.cleaner.main;
 
 import gov.noaa.pmel.tmap.cleaner.cli.CrawlerOptions;
-import gov.noaa.pmel.tmap.cleaner.crawler.DataCrawl;
-import gov.noaa.pmel.tmap.cleaner.crawler.DataCrawlCatalog;
+import gov.noaa.pmel.tmap.cleaner.crawler.CrawlableLeafNode;
+import gov.noaa.pmel.tmap.cleaner.crawler.DataCrawlOne;
 import gov.noaa.pmel.tmap.cleaner.jdo.Catalog;
 import gov.noaa.pmel.tmap.cleaner.jdo.CatalogReference;
+import gov.noaa.pmel.tmap.cleaner.jdo.LeafNodeReference;
 import gov.noaa.pmel.tmap.cleaner.jdo.PersistenceHelper;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.IOException;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
 import javax.jdo.JDOHelper;
 import javax.jdo.PersistenceManager;
-import javax.jdo.Transaction;
-import javax.swing.plaf.OptionPaneUI;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.GnuParser;
 import org.apache.commons.cli.HelpFormatter;
-import org.apache.commons.cli.Option;
 import org.apache.commons.cli.ParseException;
 import org.datanucleus.api.jdo.JDOPersistenceManagerFactory;
 import org.joda.time.DateTime;
@@ -41,8 +39,10 @@ public class DataCrawler {
     private static PersistenceHelper helper; 
     private static String root;
     private static boolean force;
-    private static List<Future<String>> futures;
     private static Properties properties;
+    private static JDOPersistenceManagerFactory pmf;
+    private static List<CrawlableLeafNode> dataSources = new ArrayList<CrawlableLeafNode>();
+    private static List<Future<String>> futures = new ArrayList<Future<String>>();
     /**
      * @param args
      */
@@ -84,45 +84,55 @@ public class DataCrawler {
                 }                
                 connectionURL = connectionURL + database;
                 properties.setProperty("datanucleus.ConnectionURL", connectionURL);
-                JDOPersistenceManagerFactory pmf = (JDOPersistenceManagerFactory) JDOHelper.getPersistenceManagerFactory(properties);
+                pmf = (JDOPersistenceManagerFactory) JDOHelper.getPersistenceManagerFactory(properties);
                 PersistenceManager persistenceManager = pmf.getPersistenceManager();
                 System.out.println("Starting data crawl work at "+DateTime.now().toString("yyyy-MM-dd HH:mm:ss")+" with "+threads+" threads.");
                 helper = new PersistenceHelper(persistenceManager);
-                Transaction tx = helper.getTransaction();
-                tx.begin();
-                Catalog rootCatalog;
-                DataCrawl dataCrawl;
                 if ( url == null ) {
-                    rootCatalog = helper.getCatalog(root, root);
-                    dataCrawl = new DataCrawlCatalog(properties, root, root, force);
-                } else {
-                    rootCatalog = helper.getCatalog(root, url);
-                    dataCrawl = new DataCrawlCatalog(properties, root, url, force);
+                    url = root;
                 }
-                futures = new ArrayList<Future<String>>();
-                Future<String> future = pool.submit(dataCrawl);
-                futures.add(future);
-                processReferences(root, rootCatalog.getCatalogRefs());
-                tx.commit();
-                for ( Iterator futuresIt = futures.iterator(); futuresIt.hasNext(); ) {
-                    Future<String> f = (Future<String>) futuresIt.next();
-                    String cat = f.get();
-                    System.out.println("Finished with "+cat);
+                Catalog rootCatalog = helper.getCatalog(root, url);
+                List<LeafNodeReference> rootLeafNodes = rootCatalog.getLeafNodes();
+                if ( rootLeafNodes != null ) {
+                    for ( Iterator leafIt = rootLeafNodes.iterator(); leafIt.hasNext(); ) {
+                        LeafNodeReference leafNodeReference = (LeafNodeReference) leafIt.next();
+                        dataSources.add(new CrawlableLeafNode(root, url, leafNodeReference));
+                    }
+                }            
+                gatherReferences(root, rootCatalog.getCatalogRefs());
+                int total = 0;
+                Collections.shuffle(dataSources);
+                for ( Iterator<CrawlableLeafNode> dsIt = dataSources.iterator(); dsIt.hasNext(); ) {
+                    CrawlableLeafNode cln = dsIt.next();
+                    DataCrawlOne one = new DataCrawlOne(pmf, cln.getRoot(), cln.getParent(), cln.getLeafNodeReference(), force);
+                    Future<String> f = pool.submit(one);
+                    futures.add(f);   
+                    total++;
+                }
+                System.out.println(total+" data sources queued for processing.");
+                boolean done = false;
+                List<String> completed = new ArrayList<String>();
+                while ( !done ) {
+                    done = true;
+                    for ( Iterator<Future<String>> futuresIt = futures.iterator(); futuresIt.hasNext(); ) {
+                        Future<String> f = (Future<String>) futuresIt.next();
+                        if ( f.isDone() ) {
+                            String leaf = f.get();
+                            if ( !completed.contains(leaf) ) {
+                                completed.add(leaf);
+                                System.out.println("Finished with "+leaf);
+                            }
+                        }
+                        done = done && f.isDone();
+                    }
                 }
                 helper.close();
                 shutdown(0);
-            } catch ( IOException e ) {
-                shutdown(-1);
-                e.printStackTrace();
-            } catch ( InterruptedException e ) {
-                shutdown(-1);
-                e.printStackTrace();
-            } catch ( ExecutionException e ) {
-                shutdown(-1);
-                e.printStackTrace();
             } catch ( Exception e ) {
-                shutdown(-1);
+                System.out.println("Error with "+e.getLocalizedMessage());
                 e.printStackTrace();
+            } finally {
+                shutdown(0);
             }
         } catch ( ParseException e ) {
             System.err.println( e.getMessage() );
@@ -132,20 +142,25 @@ public class DataCrawler {
             System.exit(-1);
         }
     }
-    public static void processReferences(String parent, List<CatalogReference> refs) {
+    public static void gatherReferences(String parent, List<CatalogReference> refs) {
+        Map<String, List<LeafNodeReference>> subReferences = new HashMap<String, List<LeafNodeReference>>();
         try {
-        for ( Iterator refsIt = refs.iterator(); refsIt.hasNext(); ) {
-            CatalogReference catalogReference = (CatalogReference) refsIt.next();
-            Catalog sub = helper.getCatalog(parent, catalogReference.getUrl());
-            if ( sub != null ) {
-                DataCrawl dataCrawl = new DataCrawlCatalog(properties, sub.getParent(), sub.getUrl(), force);
-                Future<String> future = pool.submit(dataCrawl);
-                futures.add(future);
-                processReferences(sub.getUrl(), sub.getCatalogRefs());
-            } else {
-                System.err.println("CatalogRefernce db reference was null for "+catalogReference.getUrl());
+            for ( Iterator refsIt = refs.iterator(); refsIt.hasNext(); ) {
+                CatalogReference catalogReference = (CatalogReference) refsIt.next();
+                Catalog sub = helper.getCatalog(parent, catalogReference.getUrl());
+                if ( sub != null ) {
+                    List<LeafNodeReference> l = sub.getLeafNodes();
+                    if ( l != null ) {
+                        for ( Iterator lIt = l.iterator(); lIt.hasNext(); ) {
+                            LeafNodeReference leafNodeReference = (LeafNodeReference) lIt.next();
+                            dataSources.add(new CrawlableLeafNode(parent, sub.getUrl(), leafNodeReference));
+                        }
+                    }
+                    gatherReferences(sub.getUrl(), sub.getCatalogRefs());
+                } else {
+                    System.err.println("CatalogRefernce db reference was null for "+catalogReference.getUrl());
+                }
             }
-        }
         } catch (Exception e) {
             e.printStackTrace();
             shutdown(-1);

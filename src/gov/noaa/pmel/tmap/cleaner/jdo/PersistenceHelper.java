@@ -28,7 +28,8 @@ public class PersistenceHelper {
     public LeafDataset getLeafDataset(String parent, String url) {
         LeafDataset leaf = null;
         try {
-            Query query = persistenceManager.newQuery("javax.jdo.query.SQL", "SELECT * from leafdataset WHERE url='"+url+"' AND parent='"+parent+"'");
+            String statement =  "SELECT * from leafdataset WHERE url='"+url+"' AND parent='"+parent+"'";
+            Query query = persistenceManager.newQuery("javax.jdo.query.SQL", statement);
             query.setClass(LeafDataset.class);
             List<LeafDataset> results = (List<LeafDataset>) query.execute();
             leaf = results.get(0);
@@ -52,6 +53,18 @@ public class PersistenceHelper {
         }
         return catalogXML;
     }
+    public LeafNodeReference getLeafNodeReference(String parent, String leafurl) {
+        LeafNodeReference leafRef = null;
+        try {
+            Query query = persistenceManager.newQuery("javax.jdo.query.SQL", "SELECT * from leafnodereference WHERE url='"+leafurl+"'"+"' AND parent='"+parent+"'");
+            query.setClass(LeafNodeReference.class);
+            List<LeafNodeReference> results = (List<LeafNodeReference>) query.execute();
+            leafRef = results.get(0);
+        } catch (Exception e) {
+            //S'ok, the null is ok.
+        }
+        return leafRef;
+    }
     public void save(Object object) throws Exception {
         try {
             persistenceManager.makePersistent(object);
@@ -61,9 +74,11 @@ public class PersistenceHelper {
         }
     }
     public void close() {
-       persistenceManager.close();
+        persistenceManager.getDataStoreConnection().close();
+        persistenceManager.close();
     }
     public Transaction getTransaction() {
         return persistenceManager.currentTransaction();
     }
+   
 }

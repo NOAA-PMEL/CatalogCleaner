@@ -66,18 +66,18 @@ public abstract class DataCrawl implements Callable<String> {
     String parent;
     String url;
     String leafurl;
+    JDOPersistenceManagerFactory pmf;
     PersistenceHelper helper;
     boolean force = false;
     
-    public DataCrawl(Properties properties, String parent, String url, String leafurl, boolean force) {
+    public DataCrawl(JDOPersistenceManagerFactory pmf, String parent, String url, String leafurl, boolean force) {
         super();
+        this.pmf = pmf;
         this.parent = parent;
         this.url = url;
         this.leafurl = leafurl;
         this.force = force;
-        JDOPersistenceManagerFactory pmf = (JDOPersistenceManagerFactory) JDOHelper.getPersistenceManagerFactory(properties);
-        PersistenceManager persistenceManager = pmf.getPersistenceManager();
-        helper = new PersistenceHelper(persistenceManager);
+       
     }
     
     @Override
@@ -85,63 +85,73 @@ public abstract class DataCrawl implements Callable<String> {
     
     protected void crawlLeafNode(String parent, String url) throws Exception {
         LeafDataset leaf = helper.getLeafDataset(parent, url);
-        final CatalogComment cancelMessage = new CatalogComment();
         if ( leaf == null || force ) {
             if ( leaf == null ) {
                 leaf = new LeafDataset(parent, url);
                 helper.save(leaf);
             }
-            GridDataset gridDs = null;
-            try {
-                CancelTask cancelTask = new CancelTask() {
-                    long starttime = System.currentTimeMillis();
-                    public boolean isCancel() {
-                        if(System.currentTimeMillis() > starttime + 2*60*1000) // currently set to 2 minutes
-                            return true;
-                        return false;
-                    }
-                    public void setError(String err) {
-                        cancelMessage.setComment("CANCEL TASK _ taking too long: " + err);
-                    }
-                };
-                gridDs = (GridDataset) FeatureDatasetFactoryManager.open(FeatureType.GRID, url, cancelTask, null);
-                if ( gridDs == null ) {
-                    gridDs = (GridDataset) FeatureDatasetFactoryManager.open(FeatureType.FMRC, url, cancelTask, null);
-                }
-                if ( cancelMessage.getComment() != null ) {
-                    leaf.setComment(cancelMessage);
-                }
-                List<GridDatatype> grids = gridDs.getGrids();
-                if ( grids.size() <= 0 ) {
-                    gridDs = (GridDataset) FeatureDatasetFactoryManager.open(FeatureType.FMRC, url, cancelTask, null);
-                    grids = gridDs.getGrids();
-
-                }
-                String toEncode = "";
-                List<NetCDFVariable> vars = new ArrayList<NetCDFVariable>();
-                for(int i = 0; i<grids.size(); i++){
-                    NetCDFVariable var = crawlNewVariable(grids.get(i));
-                    if ( var != null ) {
-                        vars.add(var);
-                    }
-                }
-                leaf.setVariables(vars);
-            } catch (Exception e) {
-                System.err.println("netCDF variable crawling halted with "+e.getLocalizedMessage());
-
-                CatalogComment comment = new CatalogComment();
-                comment.setComment(e.getMessage());
-                leaf.setComment(comment);
-            }
-            catch (Error e) {
-                System.err.println("netCDF variable crawling halted with "+e.getLocalizedMessage());
-
-                CatalogComment comment = new CatalogComment();
-                comment.setComment(e.getMessage());
-                leaf.setComment(comment);
+            crawlLeafNode(leaf, parent, url);
+        } else {
+            List<NetCDFVariable> variables = leaf.getVariables();
+            if ( variables == null || variables.size() == 0 ) {
+                crawlLeafNode(leaf, parent, url);
+            } else {
+                System.out.println("Already crawled: "+url);
             }
         }
-        // Else already have this saved...
+    }
+    private void crawlLeafNode(LeafDataset leaf, String parent, String url ) {
+        final CatalogComment cancelMessage = new CatalogComment();
+
+        GridDataset gridDs = null;
+        try {
+            CancelTask cancelTask = new CancelTask() {
+                long starttime = System.currentTimeMillis();
+                public boolean isCancel() {
+                    if(System.currentTimeMillis() > starttime + 2*60*1000) // currently set to 2 minutes
+                        return true;
+                    return false;
+                }
+                public void setError(String err) {
+                    cancelMessage.setComment("CANCEL TASK _ taking too long: " + err);
+                }
+            };
+            gridDs = (GridDataset) FeatureDatasetFactoryManager.open(FeatureType.GRID, url, cancelTask, null);
+            if ( gridDs == null ) {
+                gridDs = (GridDataset) FeatureDatasetFactoryManager.open(FeatureType.FMRC, url, cancelTask, null);
+            }
+            if ( cancelMessage.getComment() != null ) {
+                leaf.setComment(cancelMessage);
+            }
+            List<GridDatatype> grids = gridDs.getGrids();
+            if ( grids.size() <= 0 ) {
+                gridDs = (GridDataset) FeatureDatasetFactoryManager.open(FeatureType.FMRC, url, cancelTask, null);
+                grids = gridDs.getGrids();
+
+            }
+            String toEncode = "";
+            List<NetCDFVariable> vars = new ArrayList<NetCDFVariable>();
+            for(int i = 0; i<grids.size(); i++){
+                NetCDFVariable var = crawlNewVariable(grids.get(i));
+                if ( var != null ) {
+                    vars.add(var);
+                }
+            }
+            leaf.setVariables(vars);
+        } catch (Exception e) {
+            System.err.println("netCDF variable crawling halted with "+e.getLocalizedMessage());
+
+            CatalogComment comment = new CatalogComment();
+            comment.setComment(e.getMessage());
+            leaf.setComment(comment);
+        }
+        catch (Error e) {
+            System.err.println("netCDF variable crawling halted with "+e.getLocalizedMessage());
+
+            CatalogComment comment = new CatalogComment();
+            comment.setComment(e.getMessage());
+            leaf.setComment(comment);
+        }
     }
     private NetCDFVariable crawlNewVariable(GridDatatype grid) {
         NetCDFVariable var = new NetCDFVariable();

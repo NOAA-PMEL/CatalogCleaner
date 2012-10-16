@@ -67,7 +67,7 @@ public class ScanOne {
             Transaction tx = helper.getTransaction();
             tx.begin();
             System.out.println("Scan for: "+url);
-            DataCrawlOne dataCrawl = new DataCrawlOne(properties, parent, url, dataurl);
+            DataCrawlOne dataCrawl = new DataCrawlOne(pmf, parent, url, dataurl, true);
             String result = dataCrawl.call();
             tx.commit();
             System.out.println("Ending scan at "+DateTime.now().toString("yyyy-MM-dd HH:mm:ss"));
