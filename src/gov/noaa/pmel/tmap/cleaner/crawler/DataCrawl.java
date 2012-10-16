@@ -68,6 +68,7 @@ public abstract class DataCrawl implements Callable<String> {
     String leafurl;
     PersistenceHelper helper;
     boolean force = false;
+    
     public DataCrawl(Properties properties, String parent, String url, String leafurl, boolean force) {
         super();
         this.parent = parent;
@@ -119,11 +120,8 @@ public abstract class DataCrawl implements Callable<String> {
                 String toEncode = "";
                 List<NetCDFVariable> vars = new ArrayList<NetCDFVariable>();
                 for(int i = 0; i<grids.size(); i++){
-                    System.out.println("Variable crawling "+grids.get(i).getName()+" "+grids.get(i).getDescription());
-
                     NetCDFVariable var = crawlNewVariable(grids.get(i));
                     if ( var != null ) {
-                        System.out.println("Adding "+var.getName()+" "+var.getDescription());
                         vars.add(var);
                     }
                 }
@@ -141,21 +139,6 @@ public abstract class DataCrawl implements Callable<String> {
                 CatalogComment comment = new CatalogComment();
                 comment.setComment(e.getMessage());
                 leaf.setComment(comment);
-            }
-        }
-        List<NetCDFVariable> variables = leaf.getVariables();
-        if ( variables != null ) {
-            for ( Iterator varIt = variables.iterator(); varIt.hasNext(); ) {
-                NetCDFVariable netCDFVariable = (NetCDFVariable) varIt.next();
-                System.out.println("\tNetCDFVariable: "+netCDFVariable.getDescription());
-                GeoAxis x = netCDFVariable.getxAxis();
-                System.out.println("\t\tX-Axis: "+x.getName()+" "+x.getMinValue()+" "+x.getMaxValue());
-                GeoAxis y = netCDFVariable.getyAxis();
-                System.out.println("\t\tY-Axis: "+y.getName()+" "+y.getMinValue()+" "+y.getMaxValue());
-                VerticalAxis z = netCDFVariable.getVerticalAxis();
-                if ( z != null ) System.out.println("\t\tZ-Axis: "+z.getName()+" "+z.getMinValue()+" "+z.getMaxValue());
-                TimeAxis t = netCDFVariable.getTimeAxis();
-                if ( t != null ) System.out.println("\t\tT-Axis: "+t.getTimeCoverageStart()+" "+t.getTimeCoverageEnd());
             }
         }
         // Else already have this saved...

@@ -43,7 +43,6 @@ import org.joda.time.DateTime;
 
 public class TreeCrawler {
     private static String[] exclude;
-    private static ExecutorService pool;
     private static PersistenceHelper helper; 
     private static String root;
     private static Properties properties;
@@ -59,16 +58,8 @@ public class TreeCrawler {
             cl = parser.parse(crawlerOptions, args);
             root = cl.getOptionValue("r");
             exclude = cl.getOptionValues("x");
-            String t = cl.getOptionValue("t");
             String database = cl.getOptionValue("d");
-            int threads = 1;
-            try {
-                if ( t != null )
-                    threads = Integer.valueOf(t);
-            } catch ( NumberFormatException e ) {
-                // S'ok.  Use the default.
-            }
-            pool = Executors.newFixedThreadPool(threads);
+            
             properties = new Properties();
             URL propertiesURL =  ClassLoader.getSystemResource("datanucleus.properties");
             try {
@@ -102,12 +93,15 @@ public class TreeCrawler {
                 ((SchemaAwareStoreManager)ctx.getStoreManager()).createSchema(classNames, properties);
                 PersistenceManager persistenceManager = pmf.getPersistenceManager();
                 helper = new PersistenceHelper(persistenceManager);
-                System.out.println("Starting tree crawl work at "+DateTime.now().toString("yyyy-MM-dd HH:mm:ss")+" with "+threads+" threads.");
-                TreeCrawl crawl = new TreeCrawl(properties, root, root);
-                List<Future> futures = new ArrayList<Future>();
-                Future future = pool.submit(crawl);
-                futures.add(future);
-                saveAndProcessChildren(futures);
+                Transaction tx = helper.getTransaction();
+                tx.begin();
+                System.out.println("Starting tree crawl work at "+DateTime.now().toString("yyyy-MM-dd HH:mm:ss"));
+                TreeCrawl crawl = new TreeCrawl(helper, root, root);
+                TreeCrawlResult result = crawl.call();
+                tx.commit();
+                List<TreeCrawlResult> results = new ArrayList<TreeCrawlResult>();
+                results.add(result);
+                saveAndProcessChildren(results);
                 helper.close();
                 shutdown(0);
             } catch ( FileNotFoundException e ) {
@@ -138,41 +132,46 @@ public class TreeCrawler {
     }
     private static void shutdown(int c) {
         System.out.println("All work complete.  Shutting down at "+DateTime.now().toString("yyyy-MM-dd HH:mm:ss"));
-        pool.shutdown();
+        
         System.exit(c);
     }
-    private static void saveAndProcessChildren(List<Future> futures) throws Exception {
-        List<Future> futureChildren = new ArrayList<Future>();
-        for ( Iterator futureIt = futures.iterator(); futureIt.hasNext(); ) {
-            Future<TreeCrawlResult> future = (Future<TreeCrawlResult>) futureIt.next();
-            TreeCrawlResult result = future.get();
-           
-            Catalog catalog = helper.getCatalog(result.getParent(), result.getUrl());
+    private static void saveAndProcessChildren(List<TreeCrawlResult> results) throws Exception {
+            List<TreeCrawlResult> futureChildren = new ArrayList<TreeCrawlResult>();
+            for ( Iterator resIt = results.iterator(); resIt.hasNext(); ) {
+                TreeCrawlResult result = (TreeCrawlResult) resIt.next();
 
-            if ( catalog != null && !catalog.hasBestTimeSeries() ) {
-                List<CatalogReference> refs = catalog.getCatalogRefs();
-                List<CatalogReference> remove = new ArrayList();
-                for ( Iterator refsIt = refs.iterator(); refsIt.hasNext(); ) {
-                    CatalogReference ref = (CatalogReference) refsIt.next();
-                    for ( int i = 0; i < exclude.length; i++ ) {
-                        if ( Pattern.matches(exclude[i], ref.getUrl())) {
-                            remove.add(ref);
+
+                Catalog catalog = helper.getCatalog(result.getParent(), result.getUrl());
+
+                if ( catalog != null && !catalog.hasBestTimeSeries() ) {
+                    List<CatalogReference> refs = catalog.getCatalogRefs();
+                    List<CatalogReference> remove = new ArrayList();
+                    for ( Iterator refsIt = refs.iterator(); refsIt.hasNext(); ) {
+                        CatalogReference ref = (CatalogReference) refsIt.next();
+                        for ( int i = 0; i < exclude.length; i++ ) {
+                            if ( Pattern.matches(exclude[i], ref.getUrl())) {
+                                remove.add(ref);
+                            }
                         }
                     }
+                    refs.removeAll(remove);
+                    for ( Iterator refsIt = refs.iterator(); refsIt.hasNext(); ) {
+                        CatalogReference catalogReference = (CatalogReference) refsIt.next();
+                        String childURL = catalogReference.getUrl();
+                        TreeCrawl crawl = new TreeCrawl(helper, catalog.getUrl(), childURL);
+                        Transaction tx = helper.getTransaction();
+                        tx.begin();
+                        TreeCrawlResult futureChild = crawl.call();
+                        tx.commit();
+                        futureChildren.add(futureChild);
+                    }
+
+                } else {
+                    if ( catalog == null ) System.out.println("Future task: "+result.getParent()+" sub-catalog: "+result.getUrl()+" was null when processing children.");
                 }
-                refs.removeAll(remove);
-                for ( Iterator refsIt = refs.iterator(); refsIt.hasNext(); ) {
-                    CatalogReference catalogReference = (CatalogReference) refsIt.next();
-                    String childURL = catalogReference.getUrl();
-                    TreeCrawl crawl = new TreeCrawl(properties, catalog.getUrl(), childURL);
-                    Future<TreeCrawlResult> futureChild = pool.submit(crawl);
-                    futureChildren.add(futureChild);
-                }
-                saveAndProcessChildren(futureChildren);
-            } else {
-                if ( catalog == null ) System.out.println("Future task: "+result.getParent()+" sub-catalog: "+result.getUrl()+" was null when processing children.");
             }
-        }
+            saveAndProcessChildren(futureChildren);
+
        
         
     }

@@ -17,15 +17,9 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.Callable;
 
-import javax.jdo.JDOHelper;
-import javax.jdo.PersistenceManager;
-import javax.jdo.Transaction;
-
-import org.datanucleus.api.jdo.JDOPersistenceManagerFactory;
 import org.jdom2.Document;
 import org.jdom2.Element;
 import org.jdom2.Namespace;
@@ -45,21 +39,17 @@ public class TreeCrawl implements Callable<TreeCrawlResult> {
     private String parent;
     private Catalog catalog;
     private CatalogXML catalogXML;
+    private PersistenceHelper helper;
     private static boolean bestTime = false;
-    private static PersistenceHelper helper;
-    public TreeCrawl(Properties properties, String parent, String url) {   
+    
+    public TreeCrawl(PersistenceHelper helper, String parent, String url) {   
+        this.helper = helper;
         this.parent = parent;
         this.url = url;
-        JDOPersistenceManagerFactory pmf = (JDOPersistenceManagerFactory) JDOHelper.getPersistenceManagerFactory(properties);
-        PersistenceManager persistenceManager = pmf.getPersistenceManager();
-        helper = new PersistenceHelper(persistenceManager);
-        
     }
     @Override
     public TreeCrawlResult call() throws Exception {
-        Transaction tx = helper.getTransaction();
-        tx.begin();
-        System.out.println("Begin transaction in "+Thread.currentThread().getId());
+       
         try {
             this.catalog = helper.getCatalog(parent, url);
             this.catalogXML = helper.getCatalogXML(url);
@@ -77,7 +67,6 @@ public class TreeCrawl implements Callable<TreeCrawlResult> {
             } catch ( Exception e ) {
                 System.err.println("Failed to read "+url+" in thread "+Thread.currentThread().getId());
                 System.out.println("Commit transaction after read error in "+Thread.currentThread().getId());
-                tx.commit();
                 return new TreeCrawlResult(parent, url);
             }
             String xml = stream.toString();
@@ -91,7 +80,6 @@ public class TreeCrawl implements Callable<TreeCrawlResult> {
                 String oldxml = catalogXML.getXml();
                 if ( oldxml != null ) {
                     if ( oldxml.equals(xml) ) {
-                        tx.rollback();
                         System.out.println("Using existing xml for: " + url+" in "+Thread.currentThread().getId());
                         return new TreeCrawlResult(parent, url);
                     } else if ( !oldxml.equals(xml) ) {
@@ -131,18 +119,9 @@ public class TreeCrawl implements Callable<TreeCrawlResult> {
                 catalog.setCatalogRefs(new ArrayList<CatalogReference>());
             }
             System.out.println("Commit transaction after normal processing in "+Thread.currentThread().getId());
-            if ( url.contains("fall")) {
-                System.out.println("NY XML for "+url+" = "+catalogXML.getXml());
-            }
-            tx.commit();
             System.out.println("Finished with "+url+" in thread "+Thread.currentThread().getId());
             return new TreeCrawlResult(parent, url);
         } catch ( Exception e ) {
-            
-            if ( tx.isActive() ) {
-                System.out.println("Commit active transaction during expection processing in "+Thread.currentThread().getId());
-                tx.commit();
-            }
             System.err.println("Failed processing "+url+"with message "+e.getMessage()+" in thread "+Thread.currentThread().getId());
             return new TreeCrawlResult(parent, url);
         }

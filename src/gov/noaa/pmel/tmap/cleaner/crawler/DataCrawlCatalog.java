@@ -111,6 +111,8 @@ public class DataCrawlCatalog extends DataCrawl implements Callable<String> {
                 }
             }
         }
+        System.out.println("Closing pm for "+url);
+        helper.close();
         return url;
     }
 }
