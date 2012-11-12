@@ -3,6 +3,7 @@ package gov.noaa.pmel.tmap.cleaner.main;
 import gov.noaa.pmel.tmap.cleaner.cli.CrawlerOptions;
 import gov.noaa.pmel.tmap.cleaner.crawler.CrawlableLeafNode;
 import gov.noaa.pmel.tmap.cleaner.crawler.DataCrawlOne;
+import gov.noaa.pmel.tmap.cleaner.crawler.TimeCrawlLeafNode;
 import gov.noaa.pmel.tmap.cleaner.jdo.Catalog;
 import gov.noaa.pmel.tmap.cleaner.jdo.CatalogReference;
 import gov.noaa.pmel.tmap.cleaner.jdo.LeafDataset;
@@ -62,7 +63,6 @@ public class TimeUpdateCrawler extends Crawler {
 select url,timecoverageend from leafdataset, netcdfvariable, timeaxis where netcdfvariable.variables_leafdataset_id_oid=leafdataset.leafdataset_id AND netcdfvariable.timeaxis_timeaxis_id_oid=timeaxis_id AND timecoverageend like "%2012%";
      
      */
-    private static List<CrawlableLeafNode> dataSources = new ArrayList<CrawlableLeafNode>();
     private static final String patterns[] = {
         "yyyy-MM-dd", "yyyy-MM-dd", "yyyy-MM-dd", "yyyy-MM-dd",
         "yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd HH:mm:ss'Z'",
@@ -80,10 +80,21 @@ select url,timecoverageend from leafdataset, netcdfvariable, timeaxis where netc
             init(false, args);      
             System.out.println("Starting time update data crawl work at "+DateTime.now().toString("yyyy-MM-dd HH:mm:ss"));
             // Get the data sets that need updating, then work backward to the references to update their status and update time.
+            int total = 0;
             List<LeafDataset> datasets = helper.getDatasetsEndingThisYear();
             for ( Iterator leafIt = datasets.iterator(); leafIt.hasNext(); ) {
                 LeafDataset leafDataset = (LeafDataset) leafIt.next();
-                System.out.println(leafDataset.getUrl());
+                LeafNodeReference leafNodeReference = helper.getLeafNodeReference(leafDataset.getUrl());
+                TimeCrawlLeafNode timeCrawlLeafNode = new TimeCrawlLeafNode(pmf, leafNodeReference, leafDataset);
+                completionPool.submit(timeCrawlLeafNode);
+                total++;
+                System.out.println("Queuing "+ leafDataset.getUrl());
+            }
+            System.out.println(total+" data sources queued for processing.");
+            for ( int i = 0; i < total; i++) {
+                Future<String> f = completionPool.take();
+                String leaf = f.get();
+                System.out.println("Finished with "+leaf);
             }
             System.out.println("All work complete.  Shutting down at "+DateTime.now().toString("yyyy-MM-dd HH:mm:ss"));
             helper.close();

@@ -101,7 +101,7 @@ public abstract class DataCrawl implements Callable<String> {
         }
         return leaf;
     }
-    private void crawlLeafNode(LeafDataset leaf, String parent, String url ) {
+    protected void crawlLeafNode(LeafDataset leaf, String parent, String url ) {
         final CatalogComment cancelMessage = new CatalogComment();
         
         GridDataset gridDs = null;
