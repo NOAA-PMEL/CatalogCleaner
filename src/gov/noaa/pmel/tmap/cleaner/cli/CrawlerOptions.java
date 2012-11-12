@@ -29,5 +29,7 @@ public class CrawlerOptions extends Options {
         addOption(force);
         Option leaf = new Option("l", "leaf", true, "The OPeNDAP URL of a leaf node.");
         addOption(leaf);
+        Option varcheck = new Option("v", "varcheck", false, "Check each data set for variables and recrawl if none are found.");
+        addOption(varcheck);
     }
 }

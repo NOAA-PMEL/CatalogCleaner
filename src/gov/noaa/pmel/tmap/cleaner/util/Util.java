@@ -65,8 +65,8 @@ public class Util {
         }
         return S1.substring(Start, (Start + Max));
     }
-    public static List<String> uniqueParts(String s1, String s2) {
-        for ( int i = 0; i < 2; i++ ) {
+    public static List<String> uniqueParts(int iterations, String s1, String s2) {
+        for ( int i = 0; i < iterations; i++ ) {
             String a = Util.longestCommonSubstring(s1, s2);
             s1 = s1.replace(a, "");
             s2 = s2.replace(a, "");

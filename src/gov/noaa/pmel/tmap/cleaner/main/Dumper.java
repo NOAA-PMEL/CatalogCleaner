@@ -81,6 +81,8 @@ public class Dumper {
                         if ( z != null ) System.out.println("\t\tZ-Axis: "+z.getName()+" "+z.getMinValue()+" "+z.getMaxValue());
                         TimeAxis t = netCDFVariable.getTimeAxis();
                         if ( t != null ) System.out.println("\t\tT-Axis: "+t.getTimeCoverageStart()+" "+t.getTimeCoverageEnd());
+                        if ( t != null ) System.out.println("\t\tT-Axis: "+t.getMinValue()+" "+t.getMaxValue());
+
                     }
                 }
             }

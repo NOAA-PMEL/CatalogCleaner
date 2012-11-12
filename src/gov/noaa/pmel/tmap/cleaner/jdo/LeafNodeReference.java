@@ -28,7 +28,8 @@ public class LeafNodeReference {
         NOT_STARTED,
         DO_NOT_CRAWL,
         FINISHED,
-        FAILED
+        FAILED,
+        NO_VARIABLES_FOUND
     }
 
     public LeafNodeReference(String url, String urlPath, DataCrawlStatus status) {

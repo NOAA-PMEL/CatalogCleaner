@@ -16,7 +16,9 @@ import gov.noaa.pmel.tmap.cleaner.cli.CrawlerOptions;
 import gov.noaa.pmel.tmap.cleaner.jdo.Catalog;
 import gov.noaa.pmel.tmap.cleaner.jdo.CatalogReference;
 import gov.noaa.pmel.tmap.cleaner.jdo.CatalogXML;
+import gov.noaa.pmel.tmap.cleaner.jdo.LeafDataset;
 import gov.noaa.pmel.tmap.cleaner.jdo.LeafNodeReference;
+import gov.noaa.pmel.tmap.cleaner.jdo.NetCDFVariable;
 import gov.noaa.pmel.tmap.cleaner.jdo.PersistenceHelper;
 import gov.noaa.pmel.tmap.cleaner.jdo.LeafNodeReference.DataCrawlStatus;
 
@@ -31,8 +33,13 @@ import org.joda.time.DateTime;
 import sun.security.action.GetLongAction;
 
 public class CrawlReport {
-     private static String root;
+    private static String root;
+    private static boolean varcheck;
     private static PersistenceHelper helper;
+    private static int totalfailed = 0;
+    private static int totalscanned = 0;
+    private static int totalnotscanned = 0;
+    private static int totalnovariables = 0;
     /**
      * @param args
      */
@@ -44,6 +51,7 @@ public class CrawlReport {
         try {
             cl = parser.parse(crawlerOptions, args);
             root = cl.getOptionValue("r");
+            varcheck = cl.hasOption("v");
             String database = cl.getOptionValue("d");
             Properties properties = new Properties() ;
             URL propertiesURL =  ClassLoader.getSystemResource("datanucleus.properties");
@@ -71,34 +79,55 @@ public class CrawlReport {
             }
             List<LeafNodeReference> leaves = catalog.getLeafNodes();
             int count = 0;
+            
             int level = 1;
             if ( leaves != null ) {
                 int scanned = 0;
                 int notscanned = 0;
                 int failed = 0;
+                int novariables = 0;
                 for ( Iterator leafIt = leaves.iterator(); leafIt.hasNext(); ) {
                     LeafNodeReference leafNodeReference = (LeafNodeReference) leafIt.next();
                     if ( leafNodeReference.getDataCrawlStatus() == DataCrawlStatus.FAILED) {
                         failed++;
+                        totalfailed++;
                     } else if ( leafNodeReference.getDataCrawlStatus() == DataCrawlStatus.NOT_STARTED ) {
                         notscanned++;
+                        totalnotscanned++;
                     } else if ( leafNodeReference.getDataCrawlStatus() == DataCrawlStatus.FINISHED) {
                         scanned++;
+                        totalscanned++;
+                    } else if ( leafNodeReference.getDataCrawlStatus() == DataCrawlStatus.NO_VARIABLES_FOUND) {
+                        novariables++;
+                        totalnovariables++;
                     }
+//                    if ( varcheck ) {
+//                        LeafDataset leaf = helper.getLeafDataset(root, leafNodeReference.getUrl());
+//                        List<NetCDFVariable> vars = leaf.getVariables();
+//                        if ( vars == null || vars.size() == 0 ) {
+//                            System.out.println("-r "+root+" -u "+root+" -l "+leafNodeReference.getUrl());
+//                        }
+//                    }
                 }
                 System.out.println("Report generated at "+DateTime.now().toString("yyyy-MM-dd HH:mm:ss")+" for "+database+".");
-                System.out.println("Root has: \n\t"+leaves.size()+" OPeNDAP datasets with "+scanned+" finished "+notscanned+" not started and "+failed+" failed.");
-                List<CatalogReference> refs = catalog.getCatalogRefs();
-                if ( refs != null && refs.size() > 0 ) {
-                    System.out.println("\t"+refs.size()+" sub-catalogs.");
+                if ( varcheck ) {
+                    if ( novariables > 0 ) {
+                        System.out.println("Root has: \n\t"+leaves.size()+" OPeNDAP datasets with "+scanned+" finished "+notscanned+" not started "+failed+" failed and "+novariables+" had no variables.");
+                    }
                 } else {
-                    System.out.println("\t0 sub-catalogs.");
+                    System.out.println("Root has: \n\t"+leaves.size()+" OPeNDAP datasets with "+scanned+" finished "+notscanned+" not started "+failed+" failed and "+novariables+" had no variables.");
+                    List<CatalogReference> refs = catalog.getCatalogRefs();
+                    if ( refs != null && refs.size() > 0 ) {
+                        System.out.println("\t"+refs.size()+" sub-catalogs.");
+                    } else {
+                        System.out.println("\t0 sub-catalogs.");
+                    }
                 }
                 count = count + leaves.size();
             }
             count = count + report(count, level, catalog.getUrl(), catalog.getCatalogRefs());
             helper.close();
-            System.out.println("Total leaf data sets = "+count);
+            System.out.println("Total leaf data sets = "+count+" with "+totalscanned+" scanned "+totalnotscanned+" not scanned "+" and "+totalfailed+" failed and "+totalnovariables+" had no variables.");
             System.exit(0);
         } catch ( ParseException e ) {
             System.err.println( e.getMessage() );
@@ -127,29 +156,49 @@ public class CrawlReport {
                 int failed = 0;
                 int notscanned = 0;
                 int scanned = 0;
+                int novariables = 0;
                 for ( Iterator leafIt = leaves.iterator(); leafIt.hasNext(); ) {
                     LeafNodeReference leafNodeReference = (LeafNodeReference) leafIt.next();
                     if ( leafNodeReference.getDataCrawlStatus() == DataCrawlStatus.FAILED) {
                         failed++;
+                        totalfailed++;
                     } else if ( leafNodeReference.getDataCrawlStatus() == DataCrawlStatus.NOT_STARTED ) {
                         notscanned++;
+                        totalnotscanned++;
                     } else if ( leafNodeReference.getDataCrawlStatus() == DataCrawlStatus.FINISHED) {
                         scanned++;
+                        totalscanned++;
+                    } else if ( leafNodeReference.getDataCrawlStatus() == DataCrawlStatus.NO_VARIABLES_FOUND ) {
+                        novariables++;
+                        totalnovariables++;
                     }
+//                    if ( varcheck ) {
+//                        LeafDataset leaf = helper.getLeafDataset(sub.getUrl(), leafNodeReference.getUrl());
+//                        List<NetCDFVariable> vars = leaf.getVariables();
+//                        if ( vars == null || vars.size() == 0 ) {
+//                            System.out.println("-r "+parent+" -u "+sub.getUrl()+" -l "+leafNodeReference.getUrl());
+//                        }
+//                    }
                 }
                 if ( leaves != null && leaves.size() > 0 ) {
                     String blanks = "";
                     for ( int i = 0; i < level;  i++ ) {
                         blanks = blanks + "  ";
                     }
-                    System.out.println(blanks+sub.getUrl()+" has:\n\t"+leaves.size()+" OPeNDAP datasets with "+scanned+" finished "+notscanned+" not started and "+failed+" failed.");
-                    total = total + leaves.size();
-                    List<CatalogReference> subrefs = sub.getCatalogRefs();
-                    if ( subrefs != null && subrefs.size() > 0 ) {
-                        System.out.println(blanks+"\t"+subrefs.size()+" sub-catalogs.");
-                    } else {
-                        System.out.println("\t0 sub-catalogs.");
+                    if ( varcheck ) {
+                        if ( novariables > 0 ) {
+                            System.out.println(blanks+sub.getUrl()+" has:\n\t"+leaves.size()+" OPeNDAP datasets with "+scanned+" finished "+notscanned+" not started "+failed+" failed and "+novariables+" had no variables.");
+                        }
+                    } else { 
+                        System.out.println(blanks+sub.getUrl()+" has:\n\t"+leaves.size()+" OPeNDAP datasets with "+scanned+" finished "+notscanned+" not started "+failed+" failed and "+novariables+" had no variables.");
+                        List<CatalogReference> subrefs = sub.getCatalogRefs();
+                        if ( subrefs != null && subrefs.size() > 0 ) {
+                            System.out.println(blanks+"\t"+subrefs.size()+" sub-catalogs.");
+                        } else {
+                            System.out.println("\t0 sub-catalogs.");
+                        }
                     }
+                    total = total + leaves.size();
                 }
                 total = report(total, level, sub.getUrl(), sub.getCatalogRefs());
             } else {

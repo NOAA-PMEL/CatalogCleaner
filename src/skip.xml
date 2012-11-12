@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<skips>
+
+    <regex value=".*las.*"/>
+    <regex value=".*examples.*"/>
+    
+    <catalog url="http://ecowatch.ncddc.noaa.gov/thredds/catalog/ncom/region1/catalog.xml" />
+    <catalog url="http://ecowatch.ncddc.noaa.gov/thredds/catalog/ncom/region1_old/catalog.xml" />
+    <catalog url="http://ecowatch.ncddc.noaa.gov/thredds/catalog/ncom/region2/catalog.xml" />
+    <catalog url="http://ecowatch.ncddc.noaa.gov/thredds/catalog/ncom/region5/catalog.xml" />
+    <catalog url="http://ecowatch.ncddc.noaa.gov/thredds/catalog/ncom/region6/catalog.xml" />
+    <catalog url="http://ecowatch.ncddc.noaa.gov/thredds/catalog/ncom/region7/catalog.xml" />
+    <catalog url="http://ecowatch.ncddc.noaa.gov/thredds/catalog/ncom/region10/catalog.xml" />
+    <catalog url="http://ecowatch.ncddc.noaa.gov/thredds/catalog/ncom/gomex/catalog.xml" />
+    <catalog url="http://ecowatch.ncddc.noaa.gov/thredds/catalog/ncom/sfc8/catalog.xml" />
+    <catalog url="http://ecowatch.ncddc.noaa.gov/thredds/catalog/amseas/catalog.xml" />
+    <catalog url="http://oceanwatch.pfeg.noaa.gov/thredds/catalog.xml">
+        <dataset name="Remotely Served Datasets" />
+        <dataset name="PaCOOS Survey Datasets" />
+    </catalog>
+</skips>

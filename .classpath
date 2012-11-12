@@ -2,19 +2,22 @@
 <classpath>
 	<classpathentry kind="src" path="src"/>
 	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
-	<classpathentry kind="lib" path="/home/rhs/datanucleus-accessplatform-rdbms-3.0.6/lib/datanucleus-rdbms-3.0.6.jar"/>
-	<classpathentry kind="lib" path="/home/rhs/datanucleus-accessplatform-rdbms-3.0.6/lib/datanucleus-api-jdo-3.0.5.jar"/>
-	<classpathentry kind="lib" path="/home/rhs/datanucleus-accessplatform-rdbms-3.0.6/lib/datanucleus-core-3.0.6.jar"/>
-	<classpathentry kind="lib" path="/home/rhs/datanucleus-accessplatform-rdbms-3.0.6/lib/datanucleus-enhancer-3.0.1.jar"/>
-	<classpathentry kind="lib" path="/home/rhs/datanucleus-accessplatform-rdbms-3.0.6/deps/asm-3.3.jar"/>
-	<classpathentry kind="lib" path="/home/rhs/datanucleus-accessplatform-rdbms-3.0.6/deps/jdo-api-3.1-SNAPSHOT-20110926.jar"/>
 	<classpathentry kind="lib" path="lib/commons-cli-1.2.jar"/>
 	<classpathentry kind="lib" path="lib/log4j-1.2.13.jar"/>
-	<classpathentry kind="lib" path="lib/mysql-connector-java-3.1.13-bin.jar"/>
 	<classpathentry kind="lib" path="lib/netcdfAll-4.2.jar"/>
 	<classpathentry kind="lib" path="lib/joda-convert-1.2.jar"/>
 	<classpathentry kind="lib" path="lib/joda-time-2.1.jar"/>
 	<classpathentry kind="lib" path="lib/jdom-2.0.2.jar"/>
-	<classpathentry combineaccessrules="false" kind="src" path="/baker"/>
+	<classpathentry kind="lib" path="lib/addXML.jar"/>
+	<classpathentry kind="lib" path="/home/rhs/datanucleus-accessplatform-full-deps-3.1.1/lib/datanucleus-rdbms-3.1.1.jar"/>
+	<classpathentry kind="lib" path="/home/rhs/datanucleus-accessplatform-full-deps-3.1.1/deps/asm-4.0.jar"/>
+	<classpathentry kind="lib" path="/home/rhs/datanucleus-accessplatform-full-deps-3.1.1/lib/datanucleus-api-jdo-3.1.1.jar"/>
+	<classpathentry kind="lib" path="/home/rhs/datanucleus-accessplatform-full-deps-3.1.1/lib/datanucleus-core-3.1.1.jar"/>
+	<classpathentry kind="lib" path="/home/rhs/datanucleus-accessplatform-full-deps-3.1.1/lib/datanucleus-enhancer-3.1.0-release.jar"/>
+	<classpathentry kind="lib" path="/home/rhs/datanucleus-accessplatform-full-deps-3.1.1/deps/jdo-api-3.1-SNAPSHOT-20110926.jar"/>
+	<classpathentry kind="lib" path="lib/mysql-connector-java-5.1.22-bin.jar"/>
+	<classpathentry kind="lib" path="lib/commons-dbcp-1.4.jar"/>
+	<classpathentry kind="lib" path="lib/commons-pool-1.6.jar"/>
+	<classpathentry kind="lib" path="lib/commons-collections-3.2.1.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>

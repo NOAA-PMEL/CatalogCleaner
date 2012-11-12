@@ -9,9 +9,12 @@ import gov.noaa.pmel.tmap.cleaner.jdo.CatalogXML;
 import gov.noaa.pmel.tmap.cleaner.jdo.ClassList;
 import gov.noaa.pmel.tmap.cleaner.jdo.PersistenceHelper;
 
+import java.io.BufferedInputStream;
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.FileReader;
 import java.io.IOException;
 import java.net.URL;
 import java.sql.Connection;
@@ -41,94 +44,45 @@ import org.datanucleus.api.jdo.JDOPersistenceManagerFactory;
 import org.datanucleus.store.schema.SchemaAwareStoreManager;
 import org.joda.time.DateTime;
 
-public class TreeCrawler {
-    private static String[] exclude;
-    private static PersistenceHelper helper; 
-    private static String root;
-    private static Properties properties;
+public class TreeCrawler extends Crawler {
+
     /**
      * @param args
      */
     public static void main(String[] args) {
-        CrawlerOptions crawlerOptions = new CrawlerOptions();
-        CommandLineParser parser = new GnuParser();
-        CommandLine cl = null;
-        int width = 80;
-        try {
-            cl = parser.parse(crawlerOptions, args);
-            root = cl.getOptionValue("r");
-            exclude = cl.getOptionValues("x");
-            String database = cl.getOptionValue("d");
-            
-            properties = new Properties();
-            URL propertiesURL =  ClassLoader.getSystemResource("datanucleus.properties");
-            try {
-                properties.load(new FileInputStream(new File(propertiesURL.getFile())));
-                String connectionURL = (String) properties.get("datanucleus.ConnectionURL");
-                if ( connectionURL.contains("database") ) {
-                    connectionURL = connectionURL.replace("database", "");
-                } else {
-                    System.err.println("The conenctionURL string should use the name \"databast\" which will be substituted for with the name from the command line." );
-                    System.exit(-1);
-                }
-                String connectionUser = properties.getProperty("datanucleus.ConnectionUserName");
-                String connectionPW = properties.getProperty("datanucleus.ConnectionPassword");
 
-                Class.forName("com.mysql.jdbc.Driver").newInstance();
-                Connection conn = null;
-                Statement s = null;
-                conn = DriverManager.getConnection(connectionURL+"?user="+connectionUser+"&password="+connectionPW); 
-                s=conn.createStatement();
-                String tag = DateTime.now().toString("yyyyMMdd");
-                if ( database == null ) {
-                    database = "cc_"+tag;
-                }
-               
-                s.executeUpdate("CREATE DATABASE IF NOT EXISTS "+database);
-                connectionURL = connectionURL + database;
-                properties.setProperty("datanucleus.ConnectionURL", connectionURL);
-                JDOPersistenceManagerFactory pmf = (JDOPersistenceManagerFactory) JDOHelper.getPersistenceManagerFactory(properties);
-                NucleusContext ctx = pmf.getNucleusContext();
-                ClassList classNames = new ClassList();
-                ((SchemaAwareStoreManager)ctx.getStoreManager()).createSchema(classNames, properties);
-                PersistenceManager persistenceManager = pmf.getPersistenceManager();
-                helper = new PersistenceHelper(persistenceManager);
-                Transaction tx = helper.getTransaction();
-                tx.begin();
-                System.out.println("Starting tree crawl work at "+DateTime.now().toString("yyyy-MM-dd HH:mm:ss"));
-                TreeCrawl crawl = new TreeCrawl(helper, root, root);
-                TreeCrawlResult result = crawl.call();
-                tx.commit();
-                List<TreeCrawlResult> results = new ArrayList<TreeCrawlResult>();
-                results.add(result);
-                saveAndProcessChildren(results);
-                helper.close();
-                shutdown(0);
-            } catch ( FileNotFoundException e ) {
-                e.printStackTrace();
-            } catch ( IOException e ) {
-                e.printStackTrace();
-            } catch ( SQLException e ) {
-                e.printStackTrace();
-            } catch ( InstantiationException e ) {
-                e.printStackTrace();
-            } catch ( IllegalAccessException e ) {
-                e.printStackTrace();
-            } catch ( ClassNotFoundException e ) {
-                e.printStackTrace();
-            } catch ( Exception e ) {
-                e.printStackTrace();
-            } finally {
-                helper.close();
-                shutdown(0);
-            }
-        } catch ( ParseException e ) {
-            System.err.println( e.getMessage() );
-            HelpFormatter formatter = new HelpFormatter();
-            formatter.setWidth(width);
-            formatter.printHelp("TreeCrawler", crawlerOptions, true);
-            System.exit(-1);
+        try {
+            init(true, args);
+            Transaction tx = helper.getTransaction();
+            tx.begin();
+            System.out.println("Starting tree crawl work at "+DateTime.now().toString("yyyy-MM-dd HH:mm:ss"));
+            TreeCrawl crawl = new TreeCrawl(helper, root, root);
+            TreeCrawlResult result = crawl.call();
+            tx.commit();
+            List<TreeCrawlResult> results = new ArrayList<TreeCrawlResult>();
+            results.add(result);
+            saveAndProcessChildren(results);
+            helper.close();
+            shutdown(0);
+        } catch ( FileNotFoundException e ) {
+            e.printStackTrace();
+        } catch ( IOException e ) {
+            e.printStackTrace();
+        } catch ( SQLException e ) {
+            e.printStackTrace();
+        } catch ( InstantiationException e ) {
+            e.printStackTrace();
+        } catch ( IllegalAccessException e ) {
+            e.printStackTrace();
+        } catch ( ClassNotFoundException e ) {
+            e.printStackTrace();
+        } catch ( Exception e ) {
+            e.printStackTrace();
+        } finally {
+            helper.close();
+            shutdown(0);
         }
+
     }
     private static void shutdown(int c) {
         System.out.println("All work complete.  Shutting down at "+DateTime.now().toString("yyyy-MM-dd HH:mm:ss"));
@@ -148,8 +102,13 @@ public class TreeCrawler {
                     List<CatalogReference> remove = new ArrayList();
                     for ( Iterator refsIt = refs.iterator(); refsIt.hasNext(); ) {
                         CatalogReference ref = (CatalogReference) refsIt.next();
-                        for ( int i = 0; i < exclude.length; i++ ) {
-                            if ( Pattern.matches(exclude[i], ref.getUrl())) {
+                        for ( int i = 0; i < exclude.size(); i++ ) {
+                            if ( Pattern.matches(exclude.get(i), ref.getUrl())) {
+                                remove.add(ref);
+                            }
+                        }
+                        for ( int i = 0; i < excludeCatalog.size(); i++ ) {
+                            if ( excludeCatalog.get(i).equals(ref.getUrl()) ) {
                                 remove.add(ref);
                             }
                         }

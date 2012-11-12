@@ -1,16 +1,35 @@
 package gov.noaa.pmel.tmap.cleaner.jdo;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import javax.jdo.PersistenceManager;
 import javax.jdo.Query;
 import javax.jdo.Transaction;
 
+import org.joda.time.DateTime;
+
 public class PersistenceHelper {
     PersistenceManager persistenceManager;
     public PersistenceHelper(PersistenceManager persistenceManager) {
         super();
         this.persistenceManager = persistenceManager;
+    }
+    public List<LeafDataset> getDatasetsEndingThisYear() {
+        DateTime now = DateTime.now();
+        String year = String.valueOf(now.getYear());
+        List<LeafDataset> results = getDatasetsEndingInYear(year);
+        return results;
+    }
+    public List<LeafDataset> getDatasetsEndingInYear(String year) {
+        try {
+            Query query = persistenceManager.newQuery("javax.jdo.query.SQL", "select* from leafdataset, netcdfvariable, timeaxis where netcdfvariable.variables_leafdataset_id_oid=leafdataset.leafdataset_id AND netcdfvariable.timeaxis_timeaxis_id_oid=timeaxis_id AND timecoverageend like \"%"+year+"%\"");
+            query.setClass(LeafDataset.class);
+            List<LeafDataset> results = (List<LeafDataset>) query.execute();
+            return results;
+        } catch ( Exception e ) {
+            return new ArrayList<LeafDataset>();
+        }
     }
     public Catalog getCatalog(String parent, String url) {
         Catalog catalog = null;
@@ -53,10 +72,10 @@ public class PersistenceHelper {
         }
         return catalogXML;
     }
-    public LeafNodeReference getLeafNodeReference(String parent, String leafurl) {
+    public LeafNodeReference getLeafNodeReference(String leafurl) {
         LeafNodeReference leafRef = null;
         try {
-            Query query = persistenceManager.newQuery("javax.jdo.query.SQL", "SELECT * from leafnodereference WHERE url='"+leafurl+"'"+"' AND parent='"+parent+"'");
+            Query query = persistenceManager.newQuery("javax.jdo.query.SQL", "SELECT * from leafnodereference WHERE url='"+leafurl+"'");
             query.setClass(LeafNodeReference.class);
             List<LeafNodeReference> results = (List<LeafNodeReference>) query.execute();
             leafRef = results.get(0);
@@ -74,7 +93,6 @@ public class PersistenceHelper {
         }
     }
     public void close() {
-        persistenceManager.getDataStoreConnection().close();
         persistenceManager.close();
     }
     public Transaction getTransaction() {

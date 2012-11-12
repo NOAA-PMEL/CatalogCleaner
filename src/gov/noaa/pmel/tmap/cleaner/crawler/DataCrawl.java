@@ -83,7 +83,7 @@ public abstract class DataCrawl implements Callable<String> {
     @Override
     public abstract String call() throws Exception; 
     
-    protected void crawlLeafNode(String parent, String url) throws Exception {
+    protected LeafDataset crawlLeafNode(String parent, String url) throws Exception {
         LeafDataset leaf = helper.getLeafDataset(parent, url);
         if ( leaf == null || force ) {
             if ( leaf == null ) {
@@ -99,10 +99,11 @@ public abstract class DataCrawl implements Callable<String> {
                 System.out.println("Already crawled: "+url);
             }
         }
+        return leaf;
     }
     private void crawlLeafNode(LeafDataset leaf, String parent, String url ) {
         final CatalogComment cancelMessage = new CatalogComment();
-
+        
         GridDataset gridDs = null;
         try {
             CancelTask cancelTask = new CancelTask() {

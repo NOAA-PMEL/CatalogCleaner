@@ -1,9 +1,12 @@
 package gov.noaa.pmel.tmap.cleaner.crawler;
 
+import gov.noaa.pmel.tmap.cleaner.jdo.LeafDataset;
 import gov.noaa.pmel.tmap.cleaner.jdo.LeafNodeReference;
 import gov.noaa.pmel.tmap.cleaner.jdo.LeafNodeReference.DataCrawlStatus;
+import gov.noaa.pmel.tmap.cleaner.jdo.NetCDFVariable;
 import gov.noaa.pmel.tmap.cleaner.jdo.PersistenceHelper;
 
+import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.Callable;
 
@@ -34,13 +37,18 @@ public class DataCrawlOne extends DataCrawl implements Callable<String> {
         helper = new PersistenceHelper(persistenceManager);
         Transaction tx = helper.getTransaction();
         if ( leafNodeReference == null ) {
-            leafNodeReference = helper.getLeafNodeReference(parent, leafurl);
+            leafNodeReference = helper.getLeafNodeReference(leafurl);
         }
         tx.begin();
         System.out.println("Crawling "+leafNodeReference.getUrl()+" in thread "+Thread.currentThread().getId());
         try {
-            crawlLeafNode(url, leafurl);
-            leafNodeReference.setDataCrawlStatus(DataCrawlStatus.FINISHED);
+            LeafDataset leaf = crawlLeafNode(url, leafurl);
+            List<NetCDFVariable> vars = leaf.getVariables();
+            if ( vars != null && vars.size() > 0 ) {
+                leafNodeReference.setDataCrawlStatus(DataCrawlStatus.FINISHED);
+            } else {
+                leafNodeReference.setDataCrawlStatus(DataCrawlStatus.NO_VARIABLES_FOUND);
+            }
             leafNodeReference.setCrawlDate(DateTime.now().toString("yyyy-MM-dd HH:mm:ss"));
         } catch ( Exception e ) {
             System.err.println("Failed to save "+parent+"\n\t"+leafNodeReference.getUrl()+"\n\t for "+e.getLocalizedMessage());
@@ -48,6 +56,7 @@ public class DataCrawlOne extends DataCrawl implements Callable<String> {
         }
         tx.commit();
         helper.close();
+        System.out.println("Returning from "+leafurl);
         return leafurl;
     }
 }

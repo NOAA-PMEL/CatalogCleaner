@@ -89,7 +89,7 @@ public class Proxy {
 
 		GetMethod method = new GetMethod(request);
 		HttpClientParams params = client.getParams();
-		params.setParameter(HttpClientParams.SO_TIMEOUT, 400000);
+		params.setParameter(HttpClientParams.SO_TIMEOUT, 30000);
 		params.setParameter(HttpClientParams.ALLOW_CIRCULAR_REDIRECTS,Boolean.TRUE);
 		client.setParams(params);
 		method.getParams().setParameter(HttpMethodParams.RETRY_HANDLER, new DefaultHttpMethodRetryHandler(3, false));
