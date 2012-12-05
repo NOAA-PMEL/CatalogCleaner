@@ -31,5 +31,7 @@ public class CrawlerOptions extends Options {
         addOption(leaf);
         Option varcheck = new Option("v", "varcheck", false, "Check each data set for variables and recrawl if none are found.");
         addOption(varcheck);
+        Option full = new Option("a", "all", false, "Print all the data URL's when reporting statistics.");
+        addOption(full);
     }
 }

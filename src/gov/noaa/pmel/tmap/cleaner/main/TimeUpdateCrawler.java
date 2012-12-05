@@ -77,18 +77,23 @@ select url,timecoverageend from leafdataset, netcdfvariable, timeaxis where netc
      */
     public static void main(String[] args) {
         try {
+            Map<String, String> updates = new HashMap<String, String>();
             init(false, args);      
             System.out.println("Starting time update data crawl work at "+DateTime.now().toString("yyyy-MM-dd HH:mm:ss"));
             // Get the data sets that need updating, then work backward to the references to update their status and update time.
             int total = 0;
             List<LeafDataset> datasets = helper.getDatasetsEndingThisYear();
+            System.out.println(datasets.size()+" dataset found.");
             for ( Iterator leafIt = datasets.iterator(); leafIt.hasNext(); ) {
                 LeafDataset leafDataset = (LeafDataset) leafIt.next();
-                LeafNodeReference leafNodeReference = helper.getLeafNodeReference(leafDataset.getUrl());
-                TimeCrawlLeafNode timeCrawlLeafNode = new TimeCrawlLeafNode(pmf, leafNodeReference, leafDataset);
+                updates.put(leafDataset.getUrl(), leafDataset.getParent());
+            }
+            for ( Iterator updateIt = updates.keySet().iterator(); updateIt.hasNext(); ) {
+                String url = (String) updateIt.next();
+                TimeCrawlLeafNode timeCrawlLeafNode = new TimeCrawlLeafNode(pmf, updates.get(url), url);
+                System.out.println("Queuing "+ url+" in "+updates.get(url));
                 completionPool.submit(timeCrawlLeafNode);
                 total++;
-                System.out.println("Queuing "+ leafDataset.getUrl());
             }
             System.out.println(total+" data sources queued for processing.");
             for ( int i = 0; i < total; i++) {

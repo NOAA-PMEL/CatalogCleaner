@@ -19,6 +19,7 @@ import gov.noaa.pmel.tmap.cleaner.jdo.TimeAxis;
 import gov.noaa.pmel.tmap.cleaner.jdo.VerticalAxis;
 import gov.noaa.pmel.tmap.cleaner.jdo.LeafNodeReference.DataCrawlStatus;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -101,11 +102,10 @@ public abstract class DataCrawl implements Callable<String> {
         }
         return leaf;
     }
-    protected void crawlLeafNode(LeafDataset leaf, String parent, String url ) {
+    protected GridDataset readSource(String url) throws Exception {
         final CatalogComment cancelMessage = new CatalogComment();
-        
+
         GridDataset gridDs = null;
-        try {
             CancelTask cancelTask = new CancelTask() {
                 long starttime = System.currentTimeMillis();
                 public boolean isCancel() {
@@ -120,34 +120,118 @@ public abstract class DataCrawl implements Callable<String> {
             gridDs = (GridDataset) FeatureDatasetFactoryManager.open(FeatureType.GRID, url, cancelTask, null);
             if ( gridDs == null ) {
                 gridDs = (GridDataset) FeatureDatasetFactoryManager.open(FeatureType.FMRC, url, cancelTask, null);
-            }
-            if ( cancelMessage.getComment() != null ) {
-                leaf.setComment(cancelMessage);
-            }
-            List<GridDatatype> grids = gridDs.getGrids();
-            if ( grids.size() <= 0 ) {
-                gridDs = (GridDataset) FeatureDatasetFactoryManager.open(FeatureType.FMRC, url, cancelTask, null);
-                grids = gridDs.getGrids();
-
-            }
-            String toEncode = "";
-            List<NetCDFVariable> vars = new ArrayList<NetCDFVariable>();
-            for(int i = 0; i<grids.size(); i++){
-                NetCDFVariable var = crawlNewVariable(grids.get(i));
-                if ( var != null ) {
-                    vars.add(var);
+            } 
+            if ( gridDs != null ) {
+                List<GridDatatype> grids = gridDs.getGrids();
+                if ( grids.size() <= 0 ) {
+                    gridDs = (GridDataset) FeatureDatasetFactoryManager.open(FeatureType.FMRC, url, cancelTask, null);
                 }
             }
-            leaf.setVariables(vars);
+            if ( cancelMessage.getComment() != null ) {
+                throw new Exception(cancelMessage.getComment());
+            }
+        
+        return gridDs;
+    }
+    protected void updateLeafNodeTime(LeafDataset leaf) {
+        List<NetCDFVariable> vars = leaf.getVariables();
+        try {
+            GridDataset gridDs = readSource(leafurl);
+            if ( gridDs != null ) {
+                List<GridDatatype> grids = gridDs.getGrids();
+                for(int i = 0; i<grids.size(); i++){
+                    GridDatatype grid = grids.get(i);
+                    GridCoordSys gcs = (GridCoordSys) grid.getCoordinateSystem();
+                    String name = grid.getName();
+                    NetCDFVariable var = findVariable(name, vars);
+                    if ( var != null ) {
+                        if ( gcs.hasTimeAxis() ) {
+                            TimeAxis timeAxis = var.getTimeAxis();
+                            CoordinateAxis tAxis = gcs.getTimeAxis();
+                            double minvalue;
+                            double maxvalue;
+                            try{
+                                maxvalue = tAxis.getMaxValue();
+                                minvalue = tAxis.getMinValue();
+                                timeAxis.setMinValue(minvalue);
+                                timeAxis.setMaxValue(maxvalue);
+                                String start = timeAxis.getTimeCoverageStart();
+                                String end = timeAxis.getTimeCoverageEnd() ;
+                                String nstart = null;
+                                String nend = null;
+                                if(timeAxis.getCalendar()!=null && timeAxis.getCalendar().toLowerCase().equals("noleap")){
+                                    AxisBean tAxisBean = ADDXMLProcessor.makeTimeAxisStartEnd((CoordinateAxis1DTime) tAxis);
+                                    nstart = tAxisBean.getArange().getStart();
+                                    nend = tAxisBean.getArange().getEnd();
+                                    timeAxis.setTimeCoverageStart(nstart);
+                                    timeAxis.setTimeCoverageEnd(nend);
+                                } else if (timeAxis.getCalendar()==null || !timeAxis.getCalendar().toLowerCase().equals("noleap")){
+                                    DateRange range = gcs.getDateRange();
+                                    if(range!=null){
+                                        
+                                        if(range.getStart() != null){
+                                            nstart = range.getStart().getText();
+                                            timeAxis.setTimeCoverageStart(nstart);
+                                        }
+                                        if(range.getEnd() != null){
+                                            nend = range.getEnd().getText();
+                                            timeAxis.setTimeCoverageEnd(nend);
+                                        }
+                                        
+                                    }
+                                }  
+                                if ( nstart != null && nend != null ) {
+                                    if ( !nstart.equals(start) || !nend.equals(end) ) {
+                                        System.out.println("Time change for "+url+"Start: "+start+" now "+nstart+" End: "+end+" now "+nend);
+                                    }
+                                }
+                            } catch ( Exception e) {
+                                // This is not a double valued axis.  We're skipping it for now.  :-)
+                                System.err.println("Time not updated: "+e.getLocalizedMessage());
+                            }
+                        }
+                    }
+                }
+            }
         } catch (Exception e) {
-            System.err.println("netCDF variable crawling halted with "+e.getLocalizedMessage());
+            System.err.println("netCDF variable time update of "+leaf.getUrl()+" halted with "+e.getLocalizedMessage());
+        }
+        catch (Error e) {
+            System.err.println("netCDF variable time updae of "+leaf.getUrl()+" halted with "+e.getLocalizedMessage());
+        } 
+    }
+    protected NetCDFVariable findVariable(String name, List<NetCDFVariable> vars) {
+        for ( Iterator varsIt = vars.iterator(); varsIt.hasNext(); ) {
+            NetCDFVariable netCDFVariable = (NetCDFVariable) varsIt.next();
+            if ( netCDFVariable.getName().equals(name) ) {
+                return netCDFVariable;
+            }
+        }
+        return null;
+    }
+    protected void crawlLeafNode(LeafDataset leaf, String parent, String url ) {
+        try {
+            GridDataset gridDs = readSource(url);
+            if ( gridDs != null ) {
+                List<GridDatatype> grids = gridDs.getGrids();
+                List<NetCDFVariable> vars = new ArrayList<NetCDFVariable>();
+                for(int i = 0; i<grids.size(); i++){
+                    NetCDFVariable var = crawlNewVariable(grids.get(i));
+                    if ( var != null ) {
+                        vars.add(var);
+                    }
+                }
+                leaf.setVariables(vars);
+            }
+        } catch (Exception e) {
+            System.err.println("netCDF variable crawling of "+leaf.getUrl()+" halted with "+e.getLocalizedMessage());
 
             CatalogComment comment = new CatalogComment();
             comment.setComment(e.getMessage());
             leaf.setComment(comment);
         }
         catch (Error e) {
-            System.err.println("netCDF variable crawling halted with "+e.getLocalizedMessage());
+            System.err.println("netCDF variable crawling of "+leaf.getUrl()+" halted with "+e.getLocalizedMessage());
 
             CatalogComment comment = new CatalogComment();
             comment.setComment(e.getMessage());

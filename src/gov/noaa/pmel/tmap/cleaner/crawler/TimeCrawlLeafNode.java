@@ -2,34 +2,48 @@ package gov.noaa.pmel.tmap.cleaner.crawler;
 
 import java.util.List;
 
+import javax.jdo.PersistenceManager;
+import javax.jdo.Transaction;
+
 import gov.noaa.pmel.tmap.cleaner.jdo.LeafDataset;
 import gov.noaa.pmel.tmap.cleaner.jdo.LeafNodeReference;
 import gov.noaa.pmel.tmap.cleaner.jdo.NetCDFVariable;
+import gov.noaa.pmel.tmap.cleaner.jdo.PersistenceHelper;
 import gov.noaa.pmel.tmap.cleaner.jdo.LeafNodeReference.DataCrawlStatus;
 
 import org.datanucleus.api.jdo.JDOPersistenceManagerFactory;
 import org.joda.time.DateTime;
 
 public class TimeCrawlLeafNode extends DataCrawl {
-    LeafNodeReference leafNodeReference;
-    LeafDataset leafDataset;
-    public TimeCrawlLeafNode(JDOPersistenceManagerFactory pmf, LeafNodeReference leafNodeReference, LeafDataset leafDataset) {
-        super(pmf, null, null, leafNodeReference.getUrl(), true);
-        this.leafNodeReference = leafNodeReference;
-        this.leafDataset = leafDataset;
+    public TimeCrawlLeafNode(JDOPersistenceManagerFactory pmf, String parent, String leafurl) {
+        super(pmf, null, parent, leafurl, true);
     }
 
     @Override
     public String call() throws Exception {
-        crawlLeafNode(leafDataset, null, null);
-        List<NetCDFVariable> vars = leafDataset.getVariables();
-        if ( vars != null && vars.size() > 0 ) {
-            leafNodeReference.setDataCrawlStatus(DataCrawlStatus.FINISHED);
-        } else {
-            leafNodeReference.setDataCrawlStatus(DataCrawlStatus.NO_VARIABLES_FOUND);
+        try {
+            PersistenceManager persistenceManager = pmf.getPersistenceManager();
+            helper = new PersistenceHelper(persistenceManager);
+            Transaction tx = helper.getTransaction();
+            tx.begin();
+            LeafDataset leafDataset = helper.getLeafDataset(url, leafurl);
+            LeafNodeReference leafNodeReference = helper.getLeafNodeReference(leafurl);
+            System.out.println("Crawling "+leafNodeReference.getUrl()+" in thread "+Thread.currentThread().getId());
+            updateLeafNodeTime(leafDataset);
+            List<NetCDFVariable> vars = leafDataset.getVariables();
+            if ( vars != null && vars.size() > 0 ) {
+                leafNodeReference.setDataCrawlStatus(DataCrawlStatus.FINISHED);
+            } else {
+                leafNodeReference.setDataCrawlStatus(DataCrawlStatus.NO_VARIABLES_FOUND);
+            }
+            leafNodeReference.setCrawlDate(DateTime.now().toString("yyyy-MM-dd HH:mm:ss"));
+            tx.commit();
+        } catch ( Exception e ) {
+            System.err.println("Failed to update "+leafurl+" with "+e.getLocalizedMessage());
         }
-        leafNodeReference.setCrawlDate(DateTime.now().toString("yyyy-MM-dd HH:mm:ss"));
-        return leafNodeReference.getUrl();
+        helper.close();
+        System.out.println("Returning from "+leafurl);
+        return leafurl;
     }
 
 }

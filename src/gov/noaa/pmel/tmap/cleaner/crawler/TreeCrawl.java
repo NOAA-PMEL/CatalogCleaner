@@ -40,7 +40,6 @@ public class TreeCrawl implements Callable<TreeCrawlResult> {
     private Catalog catalog;
     private CatalogXML catalogXML;
     private PersistenceHelper helper;
-    private static boolean bestTime = false;
     
     public TreeCrawl(PersistenceHelper helper, String parent, String url) {   
         this.helper = helper;
@@ -112,21 +111,21 @@ public class TreeCrawl implements Callable<TreeCrawlResult> {
                 Parent parent = (Parent) parentIt.next();
                 parent.removeContent(new ElementFilter("catalogRef"));
             }
+            catalog.setHasBestTimeSeries(false);
             accessDatasets = findAccessDatasets(url, doc, accessDatasets);
             catalog.setLeafNodes(accessDatasets);
-            catalog.setHasBestTimeSeries(bestTime);
-            if ( bestTime ) {
+            if ( catalog.hasBestTimeSeries() ) {
                 catalog.setCatalogRefs(new ArrayList<CatalogReference>());
             }
             System.out.println("Commit transaction after normal processing in "+Thread.currentThread().getId());
             System.out.println("Finished with "+url+" in thread "+Thread.currentThread().getId());
             return new TreeCrawlResult(parent, url);
         } catch ( Exception e ) {
-            System.err.println("Failed processing "+url+"with message "+e.getMessage()+" in thread "+Thread.currentThread().getId());
+            System.err.println("Failed processing "+url+" with message "+e.getMessage()+" in thread "+Thread.currentThread().getId());
             return new TreeCrawlResult(parent, url);
         }
     }
-    private static List<CatalogReference> findCatalogRefs(String originalUrl, Element element, List<CatalogReference> catalogUrls) throws Exception {
+    private List<CatalogReference> findCatalogRefs(String originalUrl, Element element, List<CatalogReference> catalogUrls) throws Exception {
         
         if (element.getName().equals("catalogRef")) {
             String suburl = element.getAttributeValue("href", xlink);
@@ -140,14 +139,14 @@ public class TreeCrawl implements Callable<TreeCrawlResult> {
         }
         return catalogUrls;
     }
-    private static List<LeafNodeReference> findAccessDatasets(String url, Document doc, List<LeafNodeReference> datasets) throws URISyntaxException {
+    private List<LeafNodeReference> findAccessDatasets(String url, Document doc, List<LeafNodeReference> datasets) throws URISyntaxException {
         InvCatalogFactory catfactory = new InvCatalogFactory("default", false);
         String strippedDoc = JDOMUtils.toString(doc);
         InvCatalog thredds = (InvCatalog) catfactory.readXML(strippedDoc, new URI(url));
         List<InvDataset> rootInvDatasets = thredds.getDatasets();
         return findAccessDatasets(rootInvDatasets, datasets);
     }
-    private static List<LeafNodeReference> findAccessDatasets(List<InvDataset> invDatasets, List<LeafNodeReference> datasets) {
+    private List<LeafNodeReference> findAccessDatasets(List<InvDataset> invDatasets, List<LeafNodeReference> datasets) {
         for ( Iterator dsIt = invDatasets.iterator(); dsIt.hasNext(); ) {
             InvDataset ds = (InvDataset) dsIt.next();
             if ( ds.hasAccess() ) {            
@@ -156,7 +155,9 @@ public class TreeCrawl implements Callable<TreeCrawlResult> {
                     String locationUrl = access.getStandardUrlName();
                     String urlPath = access.getUrlPath();
                     datasets.add(new LeafNodeReference(locationUrl, urlPath, DataCrawlStatus.NOT_STARTED));
-                    if ( ds.getName().toLowerCase().contains("best time")) bestTime = true;
+                    if ( ds.getName().toLowerCase().contains("best time")) {
+                        catalog.setHasBestTimeSeries(true);
+                    }
                 }
 
             } else if ( ds.hasNestedDatasets() ) {

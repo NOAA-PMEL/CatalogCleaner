@@ -32,10 +32,8 @@ import org.joda.time.DateTime;
 
 import sun.security.action.GetLongAction;
 
-public class CrawlReport {
-    private static String root;
-    private static boolean varcheck;
-    private static PersistenceHelper helper;
+public class CrawlReport extends Crawler {
+   
     private static int totalfailed = 0;
     private static int totalscanned = 0;
     private static int totalnotscanned = 0;
@@ -44,29 +42,8 @@ public class CrawlReport {
      * @param args
      */
     public static void main(String[] args) {
-        CrawlerOptions crawlerOptions = new CrawlerOptions();
-        CommandLineParser parser = new GnuParser();
-        CommandLine cl = null;
-        int width = 80;
         try {
-            cl = parser.parse(crawlerOptions, args);
-            root = cl.getOptionValue("r");
-            varcheck = cl.hasOption("v");
-            String database = cl.getOptionValue("d");
-            Properties properties = new Properties() ;
-            URL propertiesURL =  ClassLoader.getSystemResource("datanucleus.properties");
-            properties.load(new FileInputStream(new File(propertiesURL.getFile())));
-            String connectionURL = (String) properties.get("datanucleus.ConnectionURL");
-            if ( connectionURL.contains("database") ) {
-                connectionURL = connectionURL.replace("database", database);
-            } else {
-                System.err.println("The conenctionURL string should use the name \"databast\" which will be substituted for each catalog" );
-                System.exit(-1);
-            }
-            properties.setProperty("datanucleus.ConnectionURL", connectionURL);
-            JDOPersistenceManagerFactory pmf = (JDOPersistenceManagerFactory) JDOHelper.getPersistenceManagerFactory(properties);
-            PersistenceManager persistenceManager = pmf.getPersistenceManager();
-            helper = new PersistenceHelper(persistenceManager);
+            init(false, args);
             Catalog catalog = helper.getCatalog(root, root);
             CatalogXML catalogXML = helper.getCatalogXML(root);
             if ( catalogXML == null ) {
@@ -78,6 +55,7 @@ public class CrawlReport {
                 System.exit(0);
             }
             List<LeafNodeReference> leaves = catalog.getLeafNodes();
+            List<CatalogReference> refs = catalog.getCatalogRefs();
             int count = 0;
             
             int level = 1;
@@ -88,6 +66,7 @@ public class CrawlReport {
                 int novariables = 0;
                 for ( Iterator leafIt = leaves.iterator(); leafIt.hasNext(); ) {
                     LeafNodeReference leafNodeReference = (LeafNodeReference) leafIt.next();
+                    if ( full ) System.out.println("\t\t"+leafNodeReference.getUrl());
                     if ( leafNodeReference.getDataCrawlStatus() == DataCrawlStatus.FAILED) {
                         failed++;
                         totalfailed++;
@@ -116,7 +95,6 @@ public class CrawlReport {
                     }
                 } else {
                     System.out.println("Root has: \n\t"+leaves.size()+" OPeNDAP datasets with "+scanned+" finished "+notscanned+" not started "+failed+" failed and "+novariables+" had no variables.");
-                    List<CatalogReference> refs = catalog.getCatalogRefs();
                     if ( refs != null && refs.size() > 0 ) {
                         System.out.println("\t"+refs.size()+" sub-catalogs.");
                     } else {
@@ -124,23 +102,23 @@ public class CrawlReport {
                     }
                 }
                 count = count + leaves.size();
+                if ( full ) {
+                    for ( Iterator leafIt = leaves.iterator(); leafIt.hasNext(); ) {
+                        LeafNodeReference leafNodeReference = (LeafNodeReference) leafIt.next();
+                        System.out.println("\t\tLeaf Data Set: "+leafNodeReference.getUrl());
+                    }
+                    for ( Iterator refIt = refs.iterator(); refIt.hasNext(); ) {
+                        CatalogReference catalogReference = (CatalogReference) refIt.next();
+                        System.out.println("\t\tCatalog Reference: "+catalogReference.getUrl());
+                    }
+                }
             }
             count = count + report(count, level, catalog.getUrl(), catalog.getCatalogRefs());
             helper.close();
             System.out.println("Total leaf data sets = "+count+" with "+totalscanned+" scanned "+totalnotscanned+" not scanned "+" and "+totalfailed+" failed and "+totalnovariables+" had no variables.");
             System.exit(0);
-        } catch ( ParseException e ) {
-            System.err.println( e.getMessage() );
-            HelpFormatter formatter = new HelpFormatter();
-            formatter.setWidth(width);
-            formatter.printHelp("TreeCrawler", crawlerOptions, true);
-            System.exit(-1);
-        } catch ( FileNotFoundException e ) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
-        } catch ( IOException e ) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
+        } catch (Exception e) {
+            System.err.println("Unable to initialize.  "+e.getMessage());
         }
     }
     private static int report(int total, int level, String parent, List<CatalogReference> refs) {
@@ -199,6 +177,17 @@ public class CrawlReport {
                         }
                     }
                     total = total + leaves.size();
+                    if ( full ) {
+                        for ( Iterator leafIt = leaves.iterator(); leafIt.hasNext(); ) {
+                            LeafNodeReference leafNodeReference = (LeafNodeReference) leafIt.next();
+                            System.out.println("\t\tLeaf Data Set: "+leafNodeReference.getUrl());
+                        }
+                        List<CatalogReference> subrefs = sub.getCatalogRefs();
+                        for ( Iterator refIt = subrefs.iterator(); refIt.hasNext(); ) {
+                            CatalogReference cr = (CatalogReference) refIt.next();
+                            System.out.println("\t\tCatalog Reference: "+cr.getUrl());
+                        }
+                    }
                 }
                 total = report(total, level, sub.getUrl(), sub.getCatalogRefs());
             } else {

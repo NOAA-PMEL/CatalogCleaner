@@ -290,6 +290,13 @@ public class Clean implements Callable<String> {
                                 URL catalogURL = new URL(reference.getUrl());
                                 String dir = "CleanCatalogs"+File.separator+catalogURL.getHost()+catalogURL.getPath().substring(0, catalogURL.getPath().lastIndexOf("/"))+catalogURL.getPath().substring(catalogURL.getPath().lastIndexOf("/"));
                                 child.setAttribute("href", dir, xlink);
+                            } else if (href.startsWith("/thredds") ) { 
+                                URL parentURL = new URL(parent);
+                                URL catalogURL = new URL(reference.getUrl());
+                                String pfile = "CleanCatalogs"+File.separator+parentURL.getHost()+parentURL.getPath().substring(0, parentURL.getPath().lastIndexOf('/')+1);
+                                String cfile = "CleanCatalogs"+File.separator+catalogURL.getHost()+catalogURL.getPath();
+                                String ref = cfile.replace(pfile, "");
+                                child.setAttribute("href", "/thredds/"+ref, xlink);
                             } else {
                                 URL parentURL = new URL(parent);
                                 URL catalogURL = new URL(reference.getUrl());
@@ -454,6 +461,8 @@ public class Clean implements Callable<String> {
 
             properties.add(nsPropertyStart);
             String hasZ = "";
+            String hasT = "";
+
             for ( Iterator rVarIt = dataOne.getVariables().iterator(); rVarIt.hasNext(); ) {
                 NetCDFVariable rVar = (NetCDFVariable) rVarIt.next();
                 VerticalAxis vert = rVar.getVerticalAxis();
@@ -502,6 +511,12 @@ public class Clean implements Callable<String> {
 
 
                 }
+                TimeAxis taxis = rVar.getTimeAxis();
+                
+
+                if ( taxis != null ) {
+                    hasT = hasT + rVar.getName() + " ";
+                }
             }
             if ( !hasZ.equals("") ) {
                 Element hasZProperty = new Element("property", ns);
@@ -509,31 +524,13 @@ public class Clean implements Callable<String> {
                 hasZProperty.setAttribute("value", hasZ.trim());
                 properties.add(hasZProperty);
             }
-            TimeAxis taxis = representativeVariable.getTimeAxis();
-            if (taxis != null) {
-                // Well, duh.  It's an aggregation.
-
-                Element timeUnitsProperty = new Element("property", ns);
-                timeUnitsProperty.setAttribute("name", "timeAxisUnits");
-                timeUnitsProperty.setAttribute("value", taxis.getUnitsString());
-                properties.add(timeUnitsProperty);
-
-                aggregation.setAttribute("dimName", taxis.getName());
-                String hasT = "";
-                long tsize = 0;
-                for ( Iterator varIt = dataOne.getVariables().iterator(); varIt.hasNext(); ) {
-                    NetCDFVariable var = (NetCDFVariable) varIt.next();
-                    hasT = hasT + var.getName() + " ";
-                }
-
+            if ( !hasT.equals("") ) {
                 Element hasTProperty = new Element("property", ns);
                 hasTProperty.setAttribute("name", "hasT");
                 hasTProperty.setAttribute("value", hasT.trim());
                 properties.add(hasTProperty);
-
-
-
             }
+        
         } else {
             if ( dataOne == null ) {
                 System.err.println("Data node information is null for "+parent+" ... "+leafNode.getUrl());
@@ -552,32 +549,55 @@ public class Clean implements Callable<String> {
             Element netcdf = new Element("netcdf", netcdfns);
             netcdf.setAttribute("location", dataset.getUrl());
             if ( dataset.getVariables() != null && dataset.getVariables().size() > 0 ) {
-                TimeAxis ta = dataset.getVariables().get(0).getTimeAxis();
-                if ( ta != null ) {
-                    if ( a == 0 ) {
-                        timeStart = ta.getTimeCoverageStart();
-                    }
-                    if ( a == aggs.size() - 1 ) {
-                        timeEnd = ta.getTimeCoverageEnd();
-                    }
-                    long tsize = ta.getSize();
-                    timeSize = timeSize + tsize;
+                List<NetCDFVariable> vars = dataset.getVariables();
+                boolean done = false;
+                boolean units = false;
+                // Find the first variable that has a time axis and use it as the basis for the time data for this dataset.
+                for ( Iterator iterator = vars.iterator(); iterator.hasNext(); ) {
+                    NetCDFVariable netCDFVariable = (NetCDFVariable) iterator.next();
 
-                    netcdf.setAttribute("ncoords", String.valueOf(tsize));
+                    TimeAxis ta = netCDFVariable.getTimeAxis();
+                    if ( ta != null && !done) {
+
+                        if ( !units ) {
+                            Element timeUnitsProperty = new Element("property", ns);
+                            timeUnitsProperty.setAttribute("name", "timeAxisUnits");
+                            timeUnitsProperty.setAttribute("value", ta.getUnitsString());
+                            properties.add(timeUnitsProperty);
+
+                            units = true;
+                        }
+
+                        done = true;
+                        aggregation.setAttribute("dimName", ta.getName());
+
+                        if ( ta != null ) {
+                            if ( a == 0 ) {
+                                timeStart = ta.getTimeCoverageStart();
+                            }
+                            if ( a == aggs.size() - 1 ) {
+                                timeEnd = ta.getTimeCoverageEnd();
+                            }
+                            long tsize = ta.getSize();
+                            timeSize = timeSize + tsize;
+
+                            netcdf.setAttribute("ncoords", String.valueOf(tsize));
+                        }
+                        aggregation.addContent(netcdf);
+                    }
                 }
-                aggregation.addContent(netcdf);
+
+                Element timeCoverageStart = new Element("property", ns);
+                timeCoverageStart.setAttribute("name", "timeCoverageStart");
+                timeCoverageStart.setAttribute("value", timeStart);
+                properties.add(timeCoverageStart);
+
+                Element timeSizeProperty = new Element("property", ns);
+                timeSizeProperty.setAttribute("name", "timeCoverageNumberOfPoints");
+                timeSizeProperty.setAttribute("value", String.valueOf(timeSize));
+                properties.add(timeSizeProperty);
             }
         }
-
-        Element timeCoverageStart = new Element("property", ns);
-        timeCoverageStart.setAttribute("name", "timeCoverageStart");
-        timeCoverageStart.setAttribute("value", timeStart);
-        properties.add(timeCoverageStart);
-
-        Element timeSizeProperty = new Element("property", ns);
-        timeSizeProperty.setAttribute("name", "timeCoverageNumberOfPoints");
-        timeSizeProperty.setAttribute("value", String.valueOf(timeSize));
-        properties.add(timeSizeProperty);
 
         Element time = new Element("timeCoverage", ns);
         Element start = new Element("start", ns);
@@ -588,6 +608,7 @@ public class Clean implements Callable<String> {
         time.addContent(end);
 
         properties.add(time);
+
         String name = "";
         for ( Iterator varIt = dataOne.getVariables().iterator(); varIt.hasNext(); ) {
             NetCDFVariable var = (NetCDFVariable) varIt.next();
@@ -618,8 +639,10 @@ public class Clean implements Callable<String> {
         }
 
         String dataURL;
-        if ( aggregating ) {
-            dataURL = threddsServer+"/dodsC/"+name+"_aggregation";
+        if ( aggregating ) {            
+            dataURL = threddsServer;
+            if ( !dataURL.endsWith("/")) dataURL = dataURL + "/";
+            dataURL = dataURL+threddsContext+"/dodsC/"+name+"_aggregation";
         } else {
             dataURL = leafNode.getUrl();
         }

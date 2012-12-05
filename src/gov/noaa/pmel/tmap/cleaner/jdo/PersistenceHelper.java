@@ -23,7 +23,7 @@ public class PersistenceHelper {
     }
     public List<LeafDataset> getDatasetsEndingInYear(String year) {
         try {
-            Query query = persistenceManager.newQuery("javax.jdo.query.SQL", "select leafdataset.leafdataset_id AS leafdataset_id, leafdataset.comment_catalogcomment_id_oid AS comment_catalogcomment_id_oid, leafdataset.parent AS parent, leafdataset.url AS url  from leafdataset, netcdfvariable, timeaxis where netcdfvariable.variables_leafdataset_id_oid=leafdataset.leafdataset_id AND netcdfvariable.timeaxis_timeaxis_id_oid=timeaxis_id AND timecoverageend like \"%"+year+"%\"");
+            Query query = persistenceManager.newQuery("javax.jdo.query.SQL", "select DISTINCT leafdataset.leafdataset_id AS leafdataset_id, leafdataset.comment_catalogcomment_id_oid AS comment_catalogcomment_id_oid, leafdataset.parent AS parent, leafdataset.url AS url  from leafdataset, netcdfvariable, timeaxis where netcdfvariable.variables_leafdataset_id_oid=leafdataset.leafdataset_id AND netcdfvariable.timeaxis_timeaxis_id_oid=timeaxis_id AND timecoverageend like \"%"+year+"%\"");
             query.setClass(LeafDataset.class);
             List<LeafDataset> results = (List<LeafDataset>) query.execute();
             return results;

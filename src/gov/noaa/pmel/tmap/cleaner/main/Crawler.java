@@ -57,6 +57,7 @@ public class Crawler {
     protected static String url;
     protected static boolean varcheck;
     protected static boolean force;
+    protected static boolean full;
     protected static JDOPersistenceManagerFactory pmf;
     protected static Properties properties;
     protected static CrawlerOptions crawlerOptions = new CrawlerOptions();
@@ -106,6 +107,7 @@ public class Crawler {
             }
             
             cl = parser.parse(crawlerOptions, args);
+            full = cl.hasOption("a");
             root = cl.getOptionValue("r");
             url = cl.getOptionValue("u");
             threddsContext = cl.getOptionValue("c");
