@@ -56,7 +56,7 @@ public class TreeCrawler extends Crawler {
             Transaction tx = helper.getTransaction();
             tx.begin();
             System.out.println("Starting tree crawl work at "+DateTime.now().toString("yyyy-MM-dd HH:mm:ss"));
-            TreeCrawl crawl = new TreeCrawl(helper, root, root);
+            TreeCrawl crawl = new TreeCrawl(helper, root, root, force);
             TreeCrawlResult result = crawl.call();
             tx.commit();
             List<TreeCrawlResult> results = new ArrayList<TreeCrawlResult>();
@@ -117,7 +117,7 @@ public class TreeCrawler extends Crawler {
                     for ( Iterator refsIt = refs.iterator(); refsIt.hasNext(); ) {
                         CatalogReference catalogReference = (CatalogReference) refsIt.next();
                         String childURL = catalogReference.getUrl();
-                        TreeCrawl crawl = new TreeCrawl(helper, catalog.getUrl(), childURL);
+                        TreeCrawl crawl = new TreeCrawl(helper, catalog.getUrl(), childURL, force);
                         Transaction tx = helper.getTransaction();
                         tx.begin();
                         TreeCrawlResult futureChild = crawl.call();

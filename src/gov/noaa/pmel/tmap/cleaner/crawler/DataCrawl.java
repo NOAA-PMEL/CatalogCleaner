@@ -39,6 +39,7 @@ import ucar.nc2.constants.FeatureType;
 import ucar.nc2.dataset.CoordinateAxis;
 import ucar.nc2.dataset.CoordinateAxis1D;
 import ucar.nc2.dataset.CoordinateAxis1DTime;
+import ucar.nc2.dataset.CoordinateAxis2D;
 import ucar.nc2.dt.GridDatatype;
 import ucar.nc2.dt.grid.GridCoordSys;
 import ucar.nc2.dt.grid.GridDataset;
@@ -462,7 +463,6 @@ public abstract class DataCrawl implements Callable<String> {
         
     }
     private GeoAxis makeGeoAxis (String type, CoordinateAxis axis) throws Exception {
-        
         GeoAxis geoAxis = new GeoAxis();
         geoAxis.setType(type);
         geoAxis.setBoundaryRef(axis.getBoundaryRef());
@@ -480,6 +480,13 @@ public abstract class DataCrawl implements Callable<String> {
         geoAxis.setIsNumeric(axis.isNumeric());
         geoAxis.setElementSize(axis.getElementSize());
         geoAxis.setName(axis.getName());
+        
+        if ( axis instanceof CoordinateAxis2D ) {
+            // Arbitrarily divide the space into 50 grid points.
+            geoAxis.setSize(50);
+            double range = Math.abs(maxvalue - minvalue);
+            
+        }
         
         return geoAxis;
 

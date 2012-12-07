@@ -35,16 +35,18 @@ import thredds.catalog.ServiceType;
 public class TreeCrawl implements Callable<TreeCrawlResult> {
     private static Proxy proxy = new Proxy();
     private static Namespace xlink = Namespace.getNamespace("xlink", "http://www.w3.org/1999/xlink");
+    private boolean force;
     private String url;
     private String parent;
     private Catalog catalog;
     private CatalogXML catalogXML;
     private PersistenceHelper helper;
     
-    public TreeCrawl(PersistenceHelper helper, String parent, String url) {   
+    public TreeCrawl(PersistenceHelper helper, String parent, String url, boolean force) {   
         this.helper = helper;
         this.parent = parent;
         this.url = url;
+        this.force = force;
     }
     @Override
     public TreeCrawlResult call() throws Exception {
@@ -80,7 +82,9 @@ public class TreeCrawl implements Callable<TreeCrawlResult> {
                 if ( oldxml != null ) {
                     if ( oldxml.equals(xml) ) {
                         System.out.println("Using existing xml for: " + url+" in "+Thread.currentThread().getId());
-                        return new TreeCrawlResult(parent, url);
+                        if ( !force ) {
+                            return new TreeCrawlResult(parent, url);
+                        }
                     } else if ( !oldxml.equals(xml) ) {
                         System.out.println("Old XML not equal, using new for: " + url+" in "+Thread.currentThread().getId());
                         catalogXML.setXml(xml);

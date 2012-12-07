@@ -296,7 +296,7 @@ public class Clean implements Callable<String> {
                                 String pfile = "CleanCatalogs"+File.separator+parentURL.getHost()+parentURL.getPath().substring(0, parentURL.getPath().lastIndexOf('/')+1);
                                 String cfile = "CleanCatalogs"+File.separator+catalogURL.getHost()+catalogURL.getPath();
                                 String ref = cfile.replace(pfile, "");
-                                child.setAttribute("href", "/thredds/"+ref, xlink);
+                                child.setAttribute("href", "/"+threddsContext+"/"+ref, xlink);
                             } else {
                                 URL parentURL = new URL(parent);
                                 URL catalogURL = new URL(reference.getUrl());
@@ -483,28 +483,38 @@ public class Clean implements Callable<String> {
                         Element zStart = new Element("start", ns);
                         Element zSize = new Element("size",ns);
                         Element zUnits = new Element("units", ns);
+                        Element zResolution = new Element("resolution", ns);
                         zStart.setText(min);
                         updown.addContent(zStart);
                         zSize.setText(String.valueOf(size));
                         updown.addContent(zSize);
                         zUnits.setText(units);
                         updown.addContent(zUnits);
+                        if ( !Double.isNaN(vert.getResolution()) ) {
+                            zResolution.setText(String.valueOf(vert.getResolution()));
+                            updown.addContent(zResolution);
+                        }
                         geospatialCoverage.addContent(updown);
+
+                        double[] vs = vert.getValues();
+
+                        if ( vs != null ) {
                         Element property = new Element("property", ns);
                         property.setAttribute("name", "updownValues");
-                        double[] vs = vert.getValues();
                         String values = "";
 
-                        if ( vs == null ) {
-                            values = "NULL Values";
-                        } else {
+                        
                             for ( int i = 0; i < vs.length; i++ ) {
                                 values = values + String.valueOf(vs[i]) + " ";
                             }
+                            property.setAttribute("value", values.trim());
+                            properties.add(property);
+                        } else {
+                            Element property = new Element("property", ns);
+                            property.setAttribute("name", "updownNumberOfPoints");
+                            property.setAttribute("value", String.valueOf(vert.getSize()));
+                            properties.add(property);
                         }
-
-                        property.setAttribute("value", values.trim());
-                        properties.add(property);
                     }
 
                     hasZ = hasZ + rVar.getName() + " ";
