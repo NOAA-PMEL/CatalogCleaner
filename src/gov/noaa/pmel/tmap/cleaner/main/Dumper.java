@@ -13,8 +13,10 @@ import javax.jdo.JDOHelper;
 import javax.jdo.PersistenceManager;
 
 import gov.noaa.pmel.tmap.cleaner.cli.CrawlerOptions;
+import gov.noaa.pmel.tmap.cleaner.jdo.Catalog;
 import gov.noaa.pmel.tmap.cleaner.jdo.GeoAxis;
 import gov.noaa.pmel.tmap.cleaner.jdo.LeafDataset;
+import gov.noaa.pmel.tmap.cleaner.jdo.LeafNodeReference;
 import gov.noaa.pmel.tmap.cleaner.jdo.NetCDFVariable;
 import gov.noaa.pmel.tmap.cleaner.jdo.PersistenceHelper;
 import gov.noaa.pmel.tmap.cleaner.jdo.TimeAxis;
@@ -65,25 +67,28 @@ public class Dumper {
             PersistenceManager persistenceManager = pmf.getPersistenceManager();
             System.out.println("Starting dump at "+DateTime.now().toString("yyyy-MM-dd HH:mm:ss"));
             helper = new PersistenceHelper(persistenceManager);
-            LeafDataset leaf = helper.getLeafDataset(url, dataurl);
-            System.out.println("Report for: "+dataurl);
-            if ( leaf != null ) {
-                List<NetCDFVariable> variables = leaf.getVariables();
-                if ( variables != null ) {
-                    for ( Iterator varIt = variables.iterator(); varIt.hasNext(); ) {
-                        NetCDFVariable netCDFVariable = (NetCDFVariable) varIt.next();
-                        System.out.println("\tNetCDFVariable: "+netCDFVariable.getDescription());
-                        GeoAxis x = netCDFVariable.getxAxis();
-                        System.out.println("\t\tX-Axis: "+x.getName()+" "+x.getMinValue()+" "+x.getMaxValue());
-                        GeoAxis y = netCDFVariable.getyAxis();
-                        System.out.println("\t\tY-Axis: "+y.getName()+" "+y.getMinValue()+" "+y.getMaxValue());
-                        VerticalAxis z = netCDFVariable.getVerticalAxis();
-                        if ( z != null ) System.out.println("\t\tZ-Axis: "+z.getName()+" "+z.getMinValue()+" "+z.getMaxValue());
-                        TimeAxis t = netCDFVariable.getTimeAxis();
-                        if ( t != null ) System.out.println("\t\tT-Axis: "+t.getTimeCoverageStart()+" "+t.getTimeCoverageEnd());
-                        if ( t != null ) System.out.println("\t\tT-Axis: "+t.getMinValue()+" "+t.getMaxValue());
-
+            if ( dataurl != null ) {
+                LeafDataset leaf = helper.getLeafDataset(url, dataurl);
+                System.out.println("Report for: "+dataurl);
+                if ( leaf != null ) {
+                    dump(leaf);
+                }
+            } else {
+                Catalog catalog = helper.getCatalog(parent, url);
+                if ( catalog != null ) {
+                    List<LeafNodeReference> leaves = catalog.getLeafNodes();
+                    for ( Iterator leafIt = leaves.iterator(); leafIt.hasNext(); ) {
+                        LeafNodeReference leafNodeReference = (LeafNodeReference) leafIt.next();
+                        LeafDataset leaf = helper.getLeafDataset(url, leafNodeReference.getUrl());
+                        if ( leaf != null ) {
+                            System.out.println("Report for "+leafNodeReference.getUrl());
+                            dump(leaf);
+                        } else {
+                            System.out.println("Leaf data set null for "+leafNodeReference.getUrl());
+                        }
                     }
+                } else {
+                    System.out.println("Catalog for "+parent+" and "+url+" is null.");
                 }
             }
             System.out.println("Finished dump at "+DateTime.now().toString("yyyy-MM-dd HH:mm:ss"));
@@ -100,6 +105,27 @@ public class Dumper {
         } catch ( IOException e ) {
             // TODO Auto-generated catch block
             e.printStackTrace();
+        }
+    }
+    private static void dump(LeafDataset leaf) {
+        List<NetCDFVariable> variables = leaf.getVariables();
+        if ( variables != null ) {
+            for ( Iterator varIt = variables.iterator(); varIt.hasNext(); ) {
+                NetCDFVariable netCDFVariable = (NetCDFVariable) varIt.next();
+                System.out.println("\tNetCDFVariable: "+netCDFVariable.getDescription());
+                GeoAxis x = netCDFVariable.getxAxis();
+                System.out.println("\t\tX-Axis: "+x.getName()+" "+x.getMinValue()+" "+x.getMaxValue());
+                GeoAxis y = netCDFVariable.getyAxis();
+                System.out.println("\t\tY-Axis: "+y.getName()+" "+y.getMinValue()+" "+y.getMaxValue());
+                VerticalAxis z = netCDFVariable.getVerticalAxis();
+                if ( z != null ) System.out.println("\t\tZ-Axis: "+z.getName()+" "+z.getMinValue()+" "+z.getMaxValue());
+                TimeAxis t = netCDFVariable.getTimeAxis();
+                if ( t != null ) System.out.println("\t\tT-Axis: "+t.getTimeCoverageStart()+" "+t.getTimeCoverageEnd());
+                if ( t != null ) System.out.println("\t\tT-Axis: "+t.getMinValue()+" "+t.getMaxValue());
+                if ( t != null ) System.out.println("\t\tT-Axis: "+t.getTimeCoverageStart()+" "+t.getTimeCoverageEnd());
+                if ( t != null ) System.out.println("\t\tT-Axis: "+t.getSize());
+
+            }
         }
     }
 }

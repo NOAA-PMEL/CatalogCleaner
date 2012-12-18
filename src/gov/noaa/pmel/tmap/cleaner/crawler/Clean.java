@@ -290,13 +290,10 @@ public class Clean implements Callable<String> {
                                 URL catalogURL = new URL(reference.getUrl());
                                 String dir = "CleanCatalogs"+File.separator+catalogURL.getHost()+catalogURL.getPath().substring(0, catalogURL.getPath().lastIndexOf("/"))+catalogURL.getPath().substring(catalogURL.getPath().lastIndexOf("/"));
                                 child.setAttribute("href", dir, xlink);
-                            } else if (href.startsWith("/thredds") ) { 
-                                URL parentURL = new URL(parent);
+                            } else if (href.startsWith("/") ) { 
                                 URL catalogURL = new URL(reference.getUrl());
-                                String pfile = "CleanCatalogs"+File.separator+parentURL.getHost()+parentURL.getPath().substring(0, parentURL.getPath().lastIndexOf('/')+1);
-                                String cfile = "CleanCatalogs"+File.separator+catalogURL.getHost()+catalogURL.getPath();
-                                String ref = cfile.replace(pfile, "");
-                                child.setAttribute("href", "/"+threddsContext+"/"+ref, xlink);
+                                String dir = "CleanCatalogs"+File.separator+catalogURL.getHost()+catalogURL.getPath().substring(0, catalogURL.getPath().lastIndexOf("/"))+catalogURL.getPath().substring(catalogURL.getPath().lastIndexOf("/"));  
+                                child.setAttribute("href", "/"+threddsContext+"/"+dir, xlink);
                             } else {
                                 URL parentURL = new URL(parent);
                                 URL catalogURL = new URL(reference.getUrl());
@@ -360,7 +357,7 @@ public class Clean implements Callable<String> {
         List<Element> properties = new ArrayList<Element>();
 
         Element variables = new Element("variables", ns);
-        variables.setAttribute("vocabulary", "CF-1.0");
+        variables.setAttribute("vocabulary", "netCDF_contents");
 
         URL aggURL = new URL(leafNode.getUrl());
 
@@ -715,19 +712,19 @@ public class Clean implements Callable<String> {
         Set<String> removedTypes = new HashSet<String>();
         List<Element> removedServiceElements = remove(doc, "service");
         remove(doc, "serviceName");
-        Iterator<Element> metaIt = doc.getRootElement().getDescendants(new ElementFilter("metadata"));
-        List<Parent> parents = new ArrayList<Parent>();
-        while ( metaIt.hasNext() ) {
-            Element meta = metaIt.next();
-            List<Element> children = meta.getChildren();
-            if ( children == null || children.size() == 0 ) {
-                parents.add(meta.getParent());
-            }
-        }
-        for ( Iterator parentIt = parents.iterator(); parentIt.hasNext(); ) {
-            Parent parent = (Parent) parentIt.next();
-            parent.removeContent(new ElementFilter("metadata"));
-        }
+//        Iterator<Element> metaIt = doc.getRootElement().getDescendants(new ElementFilter("metadata"));
+//        List<Parent> parents = new ArrayList<Parent>();
+//        while ( metaIt.hasNext() ) {
+//            Element meta = metaIt.next();
+//            List<Element> children = meta.getChildren();
+//            if ( children == null || children.size() == 0 ) {
+//                parents.add(meta.getParent());
+//            }
+//        }
+//        for ( Iterator parentIt = parents.iterator(); parentIt.hasNext(); ) {
+//            Parent parent = (Parent) parentIt.next();
+//            parent.removeContent(new ElementFilter("metadata"));
+//        }
         for ( Iterator servIt = removedServiceElements.iterator(); servIt.hasNext(); ) {
             Element service = (Element) servIt.next();
             String type = service.getAttributeValue("serviceType").toUpperCase();
@@ -802,14 +799,16 @@ public class Clean implements Callable<String> {
             if ( leafNodeReference.getDataCrawlStatus() == DataCrawlStatus.FINISHED ) {
                 LeafDataset dataset = helper.getLeafDataset(parent, leafNodeReference.getUrl());
                 if ( dataset != null ) { // Data set may be listed, but has not yet been crawled, but status should have caught this above
-
-                    String key = getAggregationSignature(dataset, false);                        
-                    List<Leaf> datasets  = datasetGroups.get(key);
-                    if ( datasets == null ) {
-                        datasets = new ArrayList<Leaf>();
-                        datasetGroups.put(key, datasets);
+                    // Only add the leaf data set to the aggregate if it's not an FMRC
+                    if ( !dataset.getUrl().contains("fmrc")) {
+                        String key = getAggregationSignature(dataset, false);                        
+                        List<Leaf> datasets  = datasetGroups.get(key);
+                        if ( datasets == null ) {
+                            datasets = new ArrayList<Leaf>();
+                            datasetGroups.put(key, datasets);
+                        }
+                        datasets.add(new Leaf(leafNodeReference, dataset));
                     }
-                    datasets.add(new Leaf(leafNodeReference, dataset));
                 }
             }
         }

@@ -72,7 +72,7 @@ public class DataCrawler extends Crawler {
             for ( Iterator<CrawlableLeafNode> dsIt = dataSources.iterator(); dsIt.hasNext(); ) {
                 CrawlableLeafNode cln = dsIt.next();
                 LeafNodeReference ref = cln.getLeafNodeReference();
-                if ( varcheck || ref.getDataCrawlStatus() == DataCrawlStatus.NO_VARIABLES_FOUND || ref.getDataCrawlStatus() == DataCrawlStatus.NOT_STARTED || ref.getDataCrawlStatus() == DataCrawlStatus.FAILED ) {
+                if ( force || varcheck || ref.getDataCrawlStatus() == DataCrawlStatus.NO_VARIABLES_FOUND || ref.getDataCrawlStatus() == DataCrawlStatus.NOT_STARTED || ref.getDataCrawlStatus() == DataCrawlStatus.FAILED ) {
                     DataCrawlOne one = new DataCrawlOne(pmf, cln.getRoot(), cln.getParent(), cln.getLeafNodeReference(), force);
                     completionPool.submit(one);
                     total++;

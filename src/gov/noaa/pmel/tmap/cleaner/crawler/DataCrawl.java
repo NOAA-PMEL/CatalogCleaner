@@ -157,30 +157,11 @@ public abstract class DataCrawl implements Callable<String> {
                                 timeAxis.setMinValue(minvalue);
                                 timeAxis.setMaxValue(maxvalue);
                                 String start = timeAxis.getTimeCoverageStart();
-                                String end = timeAxis.getTimeCoverageEnd() ;
-                                String nstart = null;
-                                String nend = null;
-                                if(timeAxis.getCalendar()!=null && timeAxis.getCalendar().toLowerCase().equals("noleap")){
-                                    AxisBean tAxisBean = ADDXMLProcessor.makeTimeAxisStartEnd((CoordinateAxis1DTime) tAxis);
-                                    nstart = tAxisBean.getArange().getStart();
-                                    nend = tAxisBean.getArange().getEnd();
-                                    timeAxis.setTimeCoverageStart(nstart);
-                                    timeAxis.setTimeCoverageEnd(nend);
-                                } else if (timeAxis.getCalendar()==null || !timeAxis.getCalendar().toLowerCase().equals("noleap")){
-                                    DateRange range = gcs.getDateRange();
-                                    if(range!=null){
-                                        
-                                        if(range.getStart() != null){
-                                            nstart = range.getStart().getText();
-                                            timeAxis.setTimeCoverageStart(nstart);
-                                        }
-                                        if(range.getEnd() != null){
-                                            nend = range.getEnd().getText();
-                                            timeAxis.setTimeCoverageEnd(nend);
-                                        }
-                                        
-                                    }
-                                }  
+                                String end = timeAxis.getTimeCoverageEnd();
+                                DateRange range = gcs.getDateRange();
+                                setTime(timeAxis, tAxis, range);
+                                String nstart = timeAxis.getTimeCoverageStart();;
+                                String nend = timeAxis.getTimeCoverageEnd();
                                 if ( nstart != null && nend != null ) {
                                     if ( !nstart.equals(start) || !nend.equals(end) ) {
                                         System.out.println("Time change for "+url+"Start: "+start+" now "+nstart+" End: "+end+" now "+nend);
@@ -195,10 +176,10 @@ public abstract class DataCrawl implements Callable<String> {
                 }
             }
         } catch (Exception e) {
-            System.err.println("netCDF variable time update of "+leaf.getUrl()+" halted with "+e.getLocalizedMessage());
+            System.err.println("netCDF variable time update of "+leaf.getUrl()+" halted with "+e);
         }
         catch (Error e) {
-            System.err.println("netCDF variable time updae of "+leaf.getUrl()+" halted with "+e.getLocalizedMessage());
+            System.err.println("netCDF variable time updae of "+leaf.getUrl()+" halted with "+e);
         } 
     }
     protected NetCDFVariable findVariable(String name, List<NetCDFVariable> vars) {
@@ -225,14 +206,14 @@ public abstract class DataCrawl implements Callable<String> {
                 leaf.setVariables(vars);
             }
         } catch (Exception e) {
-            System.err.println("netCDF variable crawling of "+leaf.getUrl()+" halted with "+e.getLocalizedMessage());
+            System.err.println("netCDF variable crawling of "+leaf.getUrl()+" halted with "+e);
 
             CatalogComment comment = new CatalogComment();
             comment.setComment(e.getMessage());
             leaf.setComment(comment);
         }
         catch (Error e) {
-            System.err.println("netCDF variable crawling of "+leaf.getUrl()+" halted with "+e.getLocalizedMessage());
+            System.err.println("netCDF variable crawling of "+leaf.getUrl()+" halted with "+e);
 
             CatalogComment comment = new CatalogComment();
             comment.setComment(e.getMessage());
@@ -382,36 +363,26 @@ public abstract class DataCrawl implements Callable<String> {
                 minvalue = tAxis.getMinValue();
                 timeAxis.setMinValue(minvalue);
                 timeAxis.setMaxValue(maxvalue);
+
             } catch ( Exception e) {
                 // This is not a double valued axis.  We're skipping it for now.  :-)
                 System.err.println("Returning a null variable because of "+e.getLocalizedMessage());
                 return null;
             }
-            timeAxis.setSize(tAxis.getSize());  
-            timeAxis.setPositive(tAxis.getPositive());
+
             timeAxis.setIsContiguous(tAxis.isContiguous());
+            timeAxis.setPositive(tAxis.getPositive());           
             timeAxis.setIsNumeric(tAxis.isNumeric());
             timeAxis.setElementSize(tAxis.getElementSize());
             timeAxis.setUnitsString(tAxis.getUnitsString());
             timeAxis.setName(tAxis.getName());
-            
+
             timeAxis.setCalendar(getCalendarIfExists(tAxis.getAttributes()));
-            
-            if(timeAxis.getCalendar()!=null && timeAxis.getCalendar().toLowerCase().equals("noleap")){
-                AxisBean tAxisBean = ADDXMLProcessor.makeTimeAxisStartEnd((CoordinateAxis1DTime) tAxis);
-                timeAxis.setTimeCoverageStart(tAxisBean.getArange().getStart());
-                timeAxis.setTimeCoverageEnd(tAxisBean.getArange().getEnd());
-            } else if (timeAxis.getCalendar()==null || !timeAxis.getCalendar().toLowerCase().equals("noleap")){
-                DateRange range = gcs.getDateRange();
-                if(range!=null){
-                    if(range.getStart() != null){
-                        timeAxis.setTimeCoverageStart(range.getStart().getText());
-                    }
-                    if(range.getEnd() != null){
-                        timeAxis.setTimeCoverageEnd(range.getEnd().getText());
-                    }
-                }
-            }           
+
+            // Older versions of Java netCDF only knew Gregorian, so we do everything ourselves when the calendar is not gregorian.
+            // This can now change when we move to the new Jave netCDF
+            DateRange range = gcs.getDateRange();
+            setTime(timeAxis, tAxis, range);            
             var.setTimeAxis(timeAxis);
         }
         
@@ -461,6 +432,29 @@ public abstract class DataCrawl implements Callable<String> {
     
         return var;
         
+    }
+    private void setTime(TimeAxis timeAxis, CoordinateAxis tAxis, DateRange range) {
+        if ((range!=null && range.getStart() != null && range.getEnd() != null) && (timeAxis.getCalendar()==null || timeAxis.getCalendar().toLowerCase().equals("gregorian")) && tAxis.getMinValue() >=0 ){
+            timeAxis.setTimeCoverageStart(range.getStart().getText());
+            timeAxis.setTimeCoverageEnd(range.getEnd().getText());
+            timeAxis.setSize(tAxis.getSize());
+        } else {
+            // Weird calendar or suspicious negative first value, do the work ourselves
+            CoordinateAxis1DTime axis = (CoordinateAxis1DTime) tAxis;
+            if ( axis.getSize() > 2 ) {
+                double t0 = axis.getCoordValue(0);
+                double t1 = axis.getCoordValue(1);
+                double tN = axis.getCoordValue((int)axis.getSize()-1);
+                if ( t0 < -1000 && t1 >= 0.0 ) {
+                    timeAxis.setMinValue(t1);
+                    timeAxis.setMaxValue(tN);
+                }
+                AxisBean tAxisBean = ADDXMLProcessor.makeTimeAxisStartEnd((CoordinateAxis1DTime) tAxis);
+                timeAxis.setSize(Long.valueOf(tAxisBean.getArange().getSize()));
+                timeAxis.setTimeCoverageStart(tAxisBean.getArange().getStart());
+                timeAxis.setTimeCoverageEnd(tAxisBean.getArange().getEnd());
+            }
+        }
     }
     private GeoAxis makeGeoAxis (String type, CoordinateAxis axis) throws Exception {
         GeoAxis geoAxis = new GeoAxis();
