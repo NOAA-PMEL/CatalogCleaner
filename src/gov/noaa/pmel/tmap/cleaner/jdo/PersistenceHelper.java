@@ -23,7 +23,7 @@ public class PersistenceHelper {
     }
     public List<LeafDataset> getDatasetsEndingInYear(String year) {
         try {
-            Query query = persistenceManager.newQuery("javax.jdo.query.SQL", "select DISTINCT leafdataset.leafdataset_id AS leafdataset_id, leafdataset.comment_catalogcomment_id_oid AS comment_catalogcomment_id_oid, leafdataset.parent AS parent, leafdataset.url AS url  from leafdataset, netcdfvariable, timeaxis where netcdfvariable.variables_leafdataset_id_oid=leafdataset.leafdataset_id AND netcdfvariable.timeaxis_timeaxis_id_oid=timeaxis_id AND timecoverageend like \"%"+year+"%\"");
+            Query query = persistenceManager.newQuery("javax.jdo.query.SQL", "select DISTINCT leafdataset.leafdataset_id AS leafdataset_id, leafdataset.comment_catalogcomment_id_oid AS comment_catalogcomment_id_oid, leafdataset.url AS url  from leafdataset, netcdfvariable, timeaxis where netcdfvariable.variables_leafdataset_id_oid=leafdataset.leafdataset_id AND netcdfvariable.timeaxis_timeaxis_id_oid=timeaxis_id AND timecoverageend like \"%"+year+"%\"");
             query.setClass(LeafDataset.class);
             List<LeafDataset> results = (List<LeafDataset>) query.execute();
             return results;
@@ -44,10 +44,27 @@ public class PersistenceHelper {
         }
         return catalog;
     }
-    public LeafDataset getLeafDataset(String parent, String url) {
+    public String getTreeRoot() {
+        Catalog catalog = null;
+        try {  
+            Query query = persistenceManager.newQuery("javax.jdo.query.SQL", "SELECT * FROM catalog WHERE url=parent");
+            query.setClass(Catalog.class);
+            @SuppressWarnings("unchecked")
+            List<Catalog> results = (List<Catalog>) query.execute();
+            catalog = results.get(0);
+        } catch (Exception e) {
+            // S'ok, we'll take the null and carry on.
+        }
+        if ( catalog != null ) {
+            return catalog.getUrl();
+        } else {
+            return null;
+        }
+    }
+    public LeafDataset getLeafDataset(String url) {
         LeafDataset leaf = null;
         try {
-            String statement =  "SELECT * from leafdataset WHERE url='"+url+"' AND parent='"+parent+"'";
+            String statement =  "SELECT * from leafdataset WHERE url='"+url+"'";
             Query query = persistenceManager.newQuery("javax.jdo.query.SQL", statement);
             query.setClass(LeafDataset.class);
             List<LeafDataset> results = (List<LeafDataset>) query.execute();
@@ -66,9 +83,7 @@ public class PersistenceHelper {
             List<CatalogXML> results = (List<CatalogXML>) query.execute();
             catalogXML = results.get(0);
         } catch (Exception e) {
-            
-            System.out.println("Error getting XML for "+url+" was "+e);
-
+            // System.out.println("Error getting XML for "+url+" was "+e);
         }
         return catalogXML;
     }

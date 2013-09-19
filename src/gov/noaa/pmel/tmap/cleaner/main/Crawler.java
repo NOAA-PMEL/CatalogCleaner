@@ -1,6 +1,7 @@
 package gov.noaa.pmel.tmap.cleaner.main;
 
 import gov.noaa.pmel.tmap.cleaner.cli.CrawlerOptions;
+import gov.noaa.pmel.tmap.cleaner.jdo.CatalogReference;
 import gov.noaa.pmel.tmap.cleaner.jdo.PersistenceHelper;
 import gov.noaa.pmel.tmap.cleaner.xml.JDOMUtils;
 
@@ -25,6 +26,7 @@ import java.util.concurrent.CompletionService;
 import java.util.concurrent.ExecutorCompletionService;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.regex.Pattern;
 
 import javax.jdo.JDOHelper;
 import javax.jdo.PersistenceManager;
@@ -58,13 +60,30 @@ public class Crawler {
     protected static boolean varcheck;
     protected static boolean force;
     protected static boolean full;
+    protected static boolean brief;
     protected static JDOPersistenceManagerFactory pmf;
     protected static Properties properties;
     protected static CrawlerOptions crawlerOptions = new CrawlerOptions();
     protected static CommandLine cl;
     public Crawler() {
         super();
-    }  
+    } 
+    public static boolean skip(String url) {
+        for ( int i = 0; i < exclude.size(); i++ ) {
+            if ( Pattern.matches(exclude.get(i), url)) {
+                return true;
+            }
+        }
+        for ( int i = 0; i < excludeCatalog.size(); i++ ) {
+            if ( excludeCatalog.get(i).equals(url) ) {
+                return true;
+            }
+        }
+        return false;
+    }
+    public static boolean skip(CatalogReference ref) {
+        return skip(ref.getUrl());
+    }
     public static void init(boolean create, String[] args) throws FileNotFoundException, IOException, InstantiationException, IllegalAccessException, ClassNotFoundException, SQLException, JDOMException{
         CommandLineParser parser = new GnuParser();
        
@@ -107,6 +126,7 @@ public class Crawler {
             }
             
             cl = parser.parse(crawlerOptions, args);
+            brief = cl.hasOption("b");
             full = cl.hasOption("a");
             root = cl.getOptionValue("r");
             url = cl.getOptionValue("u");

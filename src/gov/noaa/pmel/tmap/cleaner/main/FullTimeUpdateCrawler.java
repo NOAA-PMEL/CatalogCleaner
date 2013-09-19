@@ -1,24 +1,47 @@
 package gov.noaa.pmel.tmap.cleaner.main;
 
+import gov.noaa.pmel.tmap.cleaner.cli.CrawlerOptions;
 import gov.noaa.pmel.tmap.cleaner.crawler.CrawlableLeafNode;
 import gov.noaa.pmel.tmap.cleaner.crawler.DataCrawlOne;
+import gov.noaa.pmel.tmap.cleaner.crawler.TimeCrawlLeafNode;
 import gov.noaa.pmel.tmap.cleaner.jdo.Catalog;
 import gov.noaa.pmel.tmap.cleaner.jdo.CatalogReference;
 import gov.noaa.pmel.tmap.cleaner.jdo.LeafDataset;
 import gov.noaa.pmel.tmap.cleaner.jdo.LeafNodeReference;
 import gov.noaa.pmel.tmap.cleaner.jdo.LeafNodeReference.DataCrawlStatus;
 import gov.noaa.pmel.tmap.cleaner.jdo.NetCDFVariable;
+import gov.noaa.pmel.tmap.cleaner.jdo.PersistenceHelper;
 import gov.noaa.pmel.tmap.cleaner.jdo.TimeAxis;
+import gov.noaa.pmel.tmap.cleaner.util.Util;
 
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileReader;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
+import java.util.concurrent.CompletionService;
+import java.util.concurrent.ExecutorCompletionService;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.regex.Pattern;
 
+import javax.jdo.JDOHelper;
+import javax.jdo.PersistenceManager;
+
+import org.apache.commons.cli.CommandLine;
+import org.apache.commons.cli.CommandLineParser;
+import org.apache.commons.cli.GnuParser;
+import org.apache.commons.cli.HelpFormatter;
+import org.apache.commons.cli.ParseException;
+import org.datanucleus.api.jdo.JDOPersistenceManagerFactory;
 import org.joda.time.Chronology;
 import org.joda.time.DateTime;
 import org.joda.time.DateTimeZone;
@@ -32,9 +55,14 @@ import uk.ac.rdg.resc.edal.time.AllLeapChronology;
 import uk.ac.rdg.resc.edal.time.NoLeapChronology;
 import uk.ac.rdg.resc.edal.time.ThreeSixtyDayChronology;
 
-public class DataCrawler extends Crawler {
-   
-    private static List<CrawlableLeafNode> dataSources = new ArrayList<CrawlableLeafNode>();
+public class FullTimeUpdateCrawler extends Crawler {
+    /*
+     
+     This query should give a reasonable list of datasets that need to have their time checked.
+     
+select url,timecoverageend from leafdataset, netcdfvariable, timeaxis where netcdfvariable.variables_leafdataset_id_oid=leafdataset.leafdataset_id AND netcdfvariable.timeaxis_timeaxis_id_oid=timeaxis_id AND timecoverageend like "%2012%";
+     
+     */
     private static final String patterns[] = {
         "yyyy-MM-dd", "yyyy-MM-dd", "yyyy-MM-dd", "yyyy-MM-dd",
         "yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd HH:mm:ss'Z'",
@@ -49,38 +77,28 @@ public class DataCrawler extends Crawler {
      */
     public static void main(String[] args) {
         try {
-            init(false, args);
-           
-            System.out.println("Starting data crawl work at "+DateTime.now().toString("yyyy-MM-dd HH:mm:ss"));
-            
-            if ( url == null ) {
-                url = root;
-            }
-            
-            Catalog rootCatalog = helper.getCatalog(root, url);
-            List<LeafNodeReference> rootLeafNodes = rootCatalog.getLeafNodes();
-            if ( rootLeafNodes != null ) {
-                System.out.println("Looking at leaf data sets in "+rootCatalog.getUrl());
-                for ( Iterator leafIt = rootLeafNodes.iterator(); leafIt.hasNext(); ) {
-                    LeafNodeReference leafNodeReference = (LeafNodeReference) leafIt.next();
-                    dataSources.add(new CrawlableLeafNode(root, leafNodeReference));
-                }
-            }    
-            if ( url != null ) {
-                gatherReferences(url, rootCatalog.getCatalogRefs());
-            } else {
-                gatherReferences(root, rootCatalog.getCatalogRefs());
-            }
+            Map<String, String> updates = new HashMap<String, String>();
+            init(false, args);      
+            System.out.println("Starting time update data crawl work at "+DateTime.now().toString("yyyy-MM-dd HH:mm:ss"));
+            // Get the data sets that need updating, then work backward to the references to update their status and update time.
             int total = 0;
-            Collections.shuffle(dataSources);
-            for ( Iterator<CrawlableLeafNode> dsIt = dataSources.iterator(); dsIt.hasNext(); ) {
-                CrawlableLeafNode cln = dsIt.next();
-                LeafNodeReference ref = cln.getLeafNodeReference();
-                if ( force || varcheck || ref.getDataCrawlStatus() == DataCrawlStatus.NO_VARIABLES_FOUND || ref.getDataCrawlStatus() == DataCrawlStatus.NOT_STARTED || ref.getDataCrawlStatus() == DataCrawlStatus.FAILED ) {
-                    DataCrawlOne one = new DataCrawlOne(pmf, cln.getRoot(), cln.getLeafNodeReference(), force);
-                    completionPool.submit(one);
-                    total++;
-                }
+            List<LeafDataset> datasets = helper.getDatasetsEndingThisYear();
+            List<CrawlableLeafNode> dateCrawls = new ArrayList<CrawlableLeafNode>();
+            System.out.println(datasets.size()+" dataset found.");
+            for ( Iterator leafIt = datasets.iterator(); leafIt.hasNext(); ) {
+                LeafDataset leafDataset = (LeafDataset) leafIt.next();
+                LeafNodeReference leafNodeReference = helper.getLeafNodeReference(leafDataset.getUrl());
+                CrawlableLeafNode node = new CrawlableLeafNode(null, leafNodeReference);
+                dateCrawls.add(node);
+                System.out.println("Found "+ leafDataset.getUrl());
+            }
+            Collections.shuffle(dateCrawls);
+            for ( Iterator updateIt = dateCrawls.iterator(); updateIt.hasNext(); ) {
+                CrawlableLeafNode cln = (CrawlableLeafNode) updateIt.next();
+                DataCrawlOne one = new DataCrawlOne(pmf, cln.getRoot(), cln.getLeafNodeReference(), force);
+                System.out.println("Queuing "+ cln.getLeafNodeReference().getUrl());
+                completionPool.submit(one);
+                total++;
             }
             System.out.println(total+" data sources queued for processing.");
             for ( int i = 0; i < total; i++) {
@@ -98,6 +116,12 @@ public class DataCrawler extends Crawler {
             shutdown(0);
         }
     }
+    /**
+     * 
+     * @deprecated -- I'm not sure we need to use this, but it provides a more detailed time range check...
+     * @param dataset
+     * @return
+     */
     public static boolean checkTimeRange(LeafDataset dataset) {
         List<NetCDFVariable> vars = dataset.getVariables();
         for ( Iterator varIt = vars.iterator(); varIt.hasNext(); ) {
@@ -138,31 +162,7 @@ public class DataCrawler extends Crawler {
         }
         return false;
     }
-    public static void gatherReferences(String parent, List<CatalogReference> refs) {
-        Map<String, List<LeafNodeReference>> subReferences = new HashMap<String, List<LeafNodeReference>>();
-        try {
-            for ( Iterator refsIt = refs.iterator(); refsIt.hasNext(); ) {
-                CatalogReference catalogReference = (CatalogReference) refsIt.next();
-                Catalog sub = helper.getCatalog(parent, catalogReference.getUrl());
-                if (sub != null && !skip(catalogReference)) {
-                    List<LeafNodeReference> l = sub.getLeafNodes();
-                    if ( l != null ) {
-                        System.out.println("Looking at leaf data sets in "+sub.getUrl());
-                        for ( Iterator lIt = l.iterator(); lIt.hasNext(); ) {
-                            LeafNodeReference leafNodeReference = (LeafNodeReference) lIt.next();                           
-                            dataSources.add(new CrawlableLeafNode(parent, leafNodeReference));
-                        }
-                    }
-                    gatherReferences(sub.getUrl(), sub.getCatalogRefs());
-                } else {
-                    System.err.println("CatalogRefernce db reference was null or skipped for "+catalogReference.getUrl());
-                }
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-            shutdown(-1);
-        }
-    }
+    
     public static void shutdown(int code) {
         System.out.println("All work complete.  Shutting down at "+DateTime.now().toString("yyyy-MM-dd HH:mm:ss"));
         pool.shutdown();

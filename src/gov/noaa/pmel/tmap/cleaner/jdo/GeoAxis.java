@@ -123,4 +123,13 @@ public class GeoAxis {
     public String toString() {
         return this.name+this.elementSize+this.minValue+this.maxValue+this.size;
     }
+    public String summary() {
+        StringBuilder summary = new StringBuilder();
+        summary.append("Name = "+name+"\n");
+        summary.append("Element size = "+elementSize+"\n");
+        summary.append("Min = "+minValue+"\n");
+        summary.append("Max = "+maxValue+"\n");
+        summary.append("Size = "+size+"\n");
+        return summary.toString();
+    }
 }

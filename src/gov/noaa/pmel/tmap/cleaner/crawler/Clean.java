@@ -1,5 +1,6 @@
 package gov.noaa.pmel.tmap.cleaner.crawler;
 
+import gov.noaa.pmel.tmap.addxml.ADDXMLProcessor;
 import gov.noaa.pmel.tmap.cleaner.jdo.Catalog;
 import gov.noaa.pmel.tmap.cleaner.jdo.CatalogReference;
 import gov.noaa.pmel.tmap.cleaner.jdo.CatalogXML;
@@ -8,6 +9,8 @@ import gov.noaa.pmel.tmap.cleaner.jdo.LeafDataset;
 import gov.noaa.pmel.tmap.cleaner.jdo.LeafNodeReference;
 import gov.noaa.pmel.tmap.cleaner.jdo.NetCDFVariable;
 import gov.noaa.pmel.tmap.cleaner.jdo.PersistenceHelper;
+import gov.noaa.pmel.tmap.cleaner.jdo.Rubric;
+import gov.noaa.pmel.tmap.cleaner.jdo.StringAttribute;
 import gov.noaa.pmel.tmap.cleaner.jdo.TimeAxis;
 import gov.noaa.pmel.tmap.cleaner.jdo.VerticalAxis;
 import gov.noaa.pmel.tmap.cleaner.jdo.LeafNodeReference.DataCrawlStatus;
@@ -40,6 +43,8 @@ import javax.jdo.PersistenceManager;
 import javax.jdo.Transaction;
 
 import org.datanucleus.api.jdo.JDOPersistenceManagerFactory;
+import org.datanucleus.plugin.EclipsePluginRegistry;
+import org.jdom2.Comment;
 import org.jdom2.Document;
 import org.jdom2.Element;
 import org.jdom2.JDOMException;
@@ -49,6 +54,7 @@ import org.jdom2.filter.ElementFilter;
 import org.jdom2.output.Format;
 import org.jdom2.output.XMLOutputter;
 import org.jdom2.util.IteratorIterable;
+import org.joda.time.DateTime;
 
 import sun.awt.windows.ThemeReader;
 
@@ -75,11 +81,15 @@ public class Clean implements Callable<String> {
     private String threddsServerName;
     private String threddsContext;
     private List<String> exclude;
+    protected static List<String> excludeCatalog = new ArrayList<String>();
     private Map<String, List<String>> excludeDataset;
 
+    private Rubric rubric = new Rubric();
     
+    private String rootrubric = null;
+    private String treeroot = null;
     
-    public Clean(JDOPersistenceManagerFactory pmf, CleanableCatalog cleanableCatalog, String threddsServer, String threddsServerName, String threddsContext, List<String> exclude, Map<String, List<String>> excludeDataset) {
+    public Clean(JDOPersistenceManagerFactory pmf, CleanableCatalog cleanableCatalog, String threddsServer, String threddsServerName, String threddsContext, List<String> exclude, List<String> excludeCatalog, Map<String, List<String>> excludeDataset) {
         super();
         this.cleanableCatalog = cleanableCatalog;
         this.pmf = pmf;
@@ -88,6 +98,7 @@ public class Clean implements Callable<String> {
         this.threddsContext = threddsContext;
         this.exclude = exclude;
         this.excludeDataset = excludeDataset;
+        this.excludeCatalog = excludeCatalog;
     }
 
     @Override
@@ -100,6 +111,17 @@ public class Clean implements Callable<String> {
         CatalogXML catalogXML;
         catalog = helper.getCatalog(cleanableCatalog.getParent(), cleanableCatalog.getUrl());
         catalogXML = helper.getCatalogXML(cleanableCatalog.getUrl());
+        
+        treeroot = helper.getTreeRoot();
+        
+        if ( treeroot == null ) {
+            System.err.println("Cannot find the root catalog for this data store so cannot produce rubric files.  Exiting...");
+            return cleanableCatalog.getUrl();
+        }
+        
+        String bf = Clean.getFileName(treeroot).replace(".xml", "");
+        rootrubric = "CleanCatalogs"+bf+"_rubric.json";
+        
         if ( catalog == null || catalogXML == null ) {
             writeEmptyCatalog(cleanableCatalog.getParent(), cleanableCatalog.getUrl());
         } else {
@@ -117,6 +139,17 @@ public class Clean implements Callable<String> {
         if ( xml != null && xml.length() > 0 ) {
             JDOMUtils.XML2JDOM(xml, doc);
             
+
+            rubric.setUrl(catalog.getUrl());
+            rubric.setParent(catalog.getParent());
+            if ( !catalog.getParent().equals(treeroot) ) {
+                rubric.setParentJson(Clean.getRubricFilePath(catalog.getParent()));
+            } else {
+                // This catalog's parent is the root rubric.
+                rubric.setParentJson(rootrubric);
+            }
+            
+            
             if ( catalog.getLeafNodes() != null && catalog.getLeafNodes().size() > 0 ) {
                 
                 List<LeafNodeReference> leaves = catalog.getLeafNodes();
@@ -127,15 +160,17 @@ public class Clean implements Callable<String> {
                 String remoteBase = url.replace(path, "");
                 // Remove the services
                 Set<String> removed = removeRemoteServices(doc);  
-                
-
-              
                 Map<String, List<Leaf>> aggregates = aggregate(catalog.getUrl(), leaves);
-
+                
+                rubric.addLeaves(leaves.size());
+                
                 for ( Iterator<String> aggIt = aggregates.keySet().iterator(); aggIt.hasNext(); ) {
                     String key = aggIt.next();
                    
                     List<Leaf> aggs = aggregates.get(key);
+                    if ( aggs.size() == 1 ) {
+                        rubric.addAggregated(1);
+                    }
                     // Remove the old data set references and add the new ncml.
                     if ( aggs.size() > 1 ) {
                         if ( removed.contains("OPENDAP") ) {
@@ -147,7 +182,7 @@ public class Clean implements Callable<String> {
                     System.out.println("\tKey = "+key);
                     for ( Iterator<Leaf> aggsIt = aggs.iterator(); aggsIt.hasNext(); ) {
                         Leaf leaf = (Leaf) aggsIt.next();
-                        LeafDataset dataset = (LeafDataset) leaf.getLeafDataset();
+                        LeafDataset dataset = (LeafDataset) leaf.getLeafDataset();                    
                         System.out.println("\t\thas aggreagate: "+dataset.getUrl());
                     }           
                 }
@@ -175,22 +210,40 @@ public class Clean implements Callable<String> {
             format.setLineSeparator(System.getProperty("line.separator"));
             xout.setFormat(format);
             PrintStream fout;
+            PrintStream rout = null;
             if ( catalog.getUrl().equals(catalog.getParent()) ) {
                 fout = new PrintStream("CleanCatalog.xml"); 
             } else {
-                URL catalogURL = new URL(catalog.getUrl());
-                File ffile = new File("CleanCatalogs"+File.separator+catalogURL.getHost()+File.separator+catalogURL.getPath().substring(0, catalogURL.getPath().lastIndexOf("/")));
+                String base = getFileBase(catalog.getUrl());
+                File ffile = new File(base);
                 ffile.mkdirs();
-                File outFile = new File(ffile.getPath()+File.separator+catalogURL.getPath().substring(catalogURL.getPath().lastIndexOf("/")));
+                File outFile = new File(ffile.getPath()+File.separator+getFileName(catalog.getUrl()));              
                 fout = new PrintStream(outFile);
                 System.out.println("Writing "+catalog.getUrl()+" \n\t\tto "+outFile.getAbsolutePath());
             }
+            rubric.write();
+            Element tsp = new Element("property", ns);
+            tsp.setAttribute("name", "CatalogCleanerTimeStamp");
+            tsp.setAttribute("value", "Catalog generated by the TMAP Catalog Cleaner "+DateTime.now().toString("yyyy-MM-dd HH:mm:ss"));
+            doc.getRootElement().addContent(tsp);
             xout.output(doc, fout);
             fout.close();
         } else {
             System.err.println("Catalog XML does not exist for: "+catalogXML.getUrl());
         }
 
+    }
+    public static String getFileBase(String url) throws MalformedURLException {
+        URL catalogURL = new URL(url);
+        return "CleanCatalogs"+File.separator+catalogURL.getHost()+catalogURL.getPath().substring(0, catalogURL.getPath().lastIndexOf("/"));
+    }
+    public static String getFileName(String url) throws MalformedURLException {
+        URL catalogURL = new URL(url);
+        return catalogURL.getPath().substring(catalogURL.getPath().lastIndexOf("/"));
+    }
+    public static String getRubricFilePath(String url) throws MalformedURLException {
+        String bf = Clean.getFileName(url).replace(".xml", "");
+        return Clean.getFileBase(url)+bf+"_rubric.json";
     }
     private void removeExcludedDatasets(Element rootElement, List<String> datasets) {
         // TODO Can't use a hash set since they hav the same parent.
@@ -278,32 +331,40 @@ public class Clean implements Callable<String> {
                         convert = false;
                     }
                 }
+                if ( excludeCatalog.contains(href) ) {
+                    remove.add(child);
+                    convert=false;
+                }
                               
                 if ( convert ) {
                     // If the relative href is the list of member catalogs, mark it as having been converted.
                     boolean converted = false;
                     for ( Iterator refsIt = refs.iterator(); refsIt.hasNext(); ) {
                         CatalogReference reference = (CatalogReference) refsIt.next();
-                        if ( reference.getOriginalUrl().equals(href) ) { 
-                            converted = true;
-                            if (href.startsWith("http")) {
-                                URL catalogURL = new URL(reference.getUrl());
-                                String dir = "CleanCatalogs"+File.separator+catalogURL.getHost()+catalogURL.getPath().substring(0, catalogURL.getPath().lastIndexOf("/"))+catalogURL.getPath().substring(catalogURL.getPath().lastIndexOf("/"));
-                                child.setAttribute("href", dir, xlink);
-                            } else if (href.startsWith("/") ) { 
-                                URL catalogURL = new URL(reference.getUrl());
-                                String dir = "CleanCatalogs"+File.separator+catalogURL.getHost()+catalogURL.getPath().substring(0, catalogURL.getPath().lastIndexOf("/"))+catalogURL.getPath().substring(catalogURL.getPath().lastIndexOf("/"));  
-                                child.setAttribute("href", "/"+threddsContext+"/"+dir, xlink);
-                            } else {
-                                URL parentURL = new URL(parent);
-                                URL catalogURL = new URL(reference.getUrl());
-                                String pfile = "CleanCatalogs"+File.separator+parentURL.getHost()+parentURL.getPath().substring(0, parentURL.getPath().lastIndexOf('/')+1);
-                                String cfile = "CleanCatalogs"+File.separator+catalogURL.getHost()+catalogURL.getPath();
-                                String ref = cfile.replace(pfile, "");
-                                child.setAttribute("href", ref, xlink);
+                        // If it was in here it wasn't cleaned so it must be removed from the parent.
+                        if ( !excludeCatalog.contains(reference.getUrl()) ) {
+                            if ( reference.getOriginalUrl().equals(href) ) { 
+                                converted = true;
+                                if (href.startsWith("http")) {
+                                    URL catalogURL = new URL(reference.getUrl());
+                                    String dir = "CleanCatalogs"+File.separator+catalogURL.getHost()+catalogURL.getPath().substring(0, catalogURL.getPath().lastIndexOf("/"))+catalogURL.getPath().substring(catalogURL.getPath().lastIndexOf("/"));
+                                    child.setAttribute("href", dir, xlink);
+                                } else if (href.startsWith("/") ) { 
+                                    URL catalogURL = new URL(reference.getUrl());
+                                    String dir = "CleanCatalogs"+File.separator+catalogURL.getHost()+catalogURL.getPath().substring(0, catalogURL.getPath().lastIndexOf("/"))+catalogURL.getPath().substring(catalogURL.getPath().lastIndexOf("/"));  
+                                    child.setAttribute("href", "/"+threddsContext+"/"+dir, xlink);
+                                } else {
+                                    URL parentURL = new URL(parent);
+                                    URL catalogURL = new URL(reference.getUrl());
+                                    String pfile = "CleanCatalogs"+File.separator+parentURL.getHost()+parentURL.getPath().substring(0, parentURL.getPath().lastIndexOf('/')+1);
+                                    String cfile = "CleanCatalogs"+File.separator+catalogURL.getHost()+catalogURL.getPath();
+                                    String ref = cfile.replace(pfile, "");
+                                    child.setAttribute("href", ref, xlink);
+                                }
                             }
                         }
                     }
+
                     // If it wasn't converted it must have been excluded so removed it.
                     if ( !converted ) {
                         remove.add(child);
@@ -375,13 +436,44 @@ public class Clean implements Callable<String> {
             documentation.setAttribute("title", "Aggregated from catalog "+catalogHTML+" starting with "+leafNode.getUrl().substring(0, leafNode.getUrl().lastIndexOf('/')), xlink);
             properties.add(documentation);
         }
+        
+        boolean rescan = false;
+
 
         if ( dataOne != null && dataOne.getVariables().size() > 0) {
-            // We are going to aggregate.  Get the 0th variable and use it to fill out the GeoSpaticalCoverage
-            // By definition, any other variable in this collection should have the same characteristics.
+
+
+            /*
+             * We can only promote LAS metadata for a data set that has one z-axis and one t-axis.
+             * If it has more than one of each of these (ROMS model output for example) then we must
+             * scan the original data set using addXML at the time this catalog is configure.
+             * 
+             * We are now marking the data set for scanning with a property...
+             */
+            List<NetCDFVariable> repVariables = dataOne.getVariables();
+            Set<String> znames = new HashSet<String>();
+            Set<String> tnames = new HashSet<String>();
+            for (Iterator repVarIt = repVariables.iterator(); repVarIt.hasNext();) {
+                NetCDFVariable netCDFVariable = (NetCDFVariable) repVarIt.next();
+                TimeAxis repTimeAxis = netCDFVariable.getTimeAxis();
+                VerticalAxis repZAxis = netCDFVariable.getVerticalAxis();
+                if ( repTimeAxis != null ) {
+                    tnames.add(repTimeAxis.getName());
+                }
+                if ( repZAxis != null ) {
+                    znames.add(repZAxis.getName());
+                }
+            }
+
+            // If there is more than one group, then this will be a loop and we will be putting the variables into data sets and
+            // using the matching data set as a container.  If not, the code will look as it does now.
+            System.out.println("There are "+tnames.size()+" time axes and "+znames.size()+" z axes.");
+
+            if ( tnames.size() > 1 || znames.size() > 1 ) {
+                rescan = true;
+            }
+            // Always do the XY metadata...
             NetCDFVariable representativeVariable = dataOne.getVariables().get(0);
-
-
 
             GeoAxis yaxis = representativeVariable.getyAxis();
             double latmax = representativeVariable.getLatMax();
@@ -424,7 +516,7 @@ public class Clean implements Callable<String> {
             geospatialCoverage.addContent(eastwest);
 
             Element ewPropertyNumberOfPoints = new Element("property", ns);
-            ewPropertyNumberOfPoints.setAttribute("name", "eastwestPropertyNumberOfPoints");
+            ewPropertyNumberOfPoints.setAttribute("name", "eastwestNumberOfPoints");
             ewPropertyNumberOfPoints.setAttribute("value", String.valueOf(xaxis.getSize()));
 
             properties.add(ewPropertyNumberOfPoints);
@@ -441,7 +533,7 @@ public class Clean implements Callable<String> {
 
             properties.add(ewPropertyStart);
             Element nsPropertyNumberOfPoints = new Element("property", ns);
-            nsPropertyNumberOfPoints.setAttribute("name", "northsouthPropertyNumberOfPoints");
+            nsPropertyNumberOfPoints.setAttribute("name", "northsouthNumberOfPoints");
             nsPropertyNumberOfPoints.setAttribute("value", String.valueOf(yaxis.getSize()));
 
             properties.add(nsPropertyNumberOfPoints);
@@ -457,87 +549,100 @@ public class Clean implements Callable<String> {
             nsPropertyStart.setAttribute("value", String.valueOf(latmin));
 
             properties.add(nsPropertyStart);
-            String hasZ = "";
-            String hasT = "";
-
-            for ( Iterator rVarIt = dataOne.getVariables().iterator(); rVarIt.hasNext(); ) {
-                NetCDFVariable rVar = (NetCDFVariable) rVarIt.next();
-                VerticalAxis vert = rVar.getVerticalAxis();
-                if ( vert != null ) {
-                    // TODO We can't currently handle a data set with mulitple z-axis definitions in the same data source.
-                    if ( hasZ.equals("") ) {
-                        String positive = vert.getPositive();
-                        if ( positive != null ) {
-                            geospatialCoverage.setAttribute("zpositive", positive);
-                        }
-                        String min = String.valueOf(vert.getMinValue());
-                        double size = vert.getMaxValue() - vert.getMinValue();
-                        String units = vert.getUnitsString();
-                        if ( units == null ) {
-                            units = "";
-                        }
-                        Element updown = new Element("updown", ns);
-                        Element zStart = new Element("start", ns);
-                        Element zSize = new Element("size",ns);
-                        Element zUnits = new Element("units", ns);
-                        Element zResolution = new Element("resolution", ns);
-                        zStart.setText(min);
-                        updown.addContent(zStart);
-                        zSize.setText(String.valueOf(size));
-                        updown.addContent(zSize);
-                        zUnits.setText(units);
-                        updown.addContent(zUnits);
-                        if ( !Double.isNaN(vert.getResolution()) ) {
-                            zResolution.setText(String.valueOf(vert.getResolution()));
-                            updown.addContent(zResolution);
-                        }
-                        geospatialCoverage.addContent(updown);
-
-                        double[] vs = vert.getValues();
-
-                        if ( vs != null ) {
-                        Element property = new Element("property", ns);
-                        property.setAttribute("name", "updownValues");
-                        String values = "";
-
-                        
-                            for ( int i = 0; i < vs.length; i++ ) {
-                                values = values + String.valueOf(vs[i]) + " ";
-                            }
-                            property.setAttribute("value", values.trim());
-                            properties.add(property);
-                        } else {
-                            Element property = new Element("property", ns);
-                            property.setAttribute("name", "updownNumberOfPoints");
-                            property.setAttribute("value", String.valueOf(vert.getSize()));
-                            properties.add(property);
-                        }
-                    }
-
-                    hasZ = hasZ + rVar.getName() + " ";
-
-
-                }
-                TimeAxis taxis = rVar.getTimeAxis();
+            if ( rescan ) {
                 
+                Element rescanProperty = new Element("property", ns);
+                rescanProperty.setAttribute("name", "LAS_scan");
+                rescanProperty.setAttribute("value", "true");
+                properties.add(rescanProperty);
+                
+            } else {
 
-                if ( taxis != null ) {
-                    hasT = hasT + rVar.getName() + " ";
+
+                // Only do the ZT metadata if there is at most one of each such axis.
+                
+                
+                String hasZ = "";
+                String hasT = "";
+
+                for ( Iterator rVarIt = dataOne.getVariables().iterator(); rVarIt.hasNext(); ) {
+                    NetCDFVariable rVar = (NetCDFVariable) rVarIt.next();
+                    VerticalAxis vert = rVar.getVerticalAxis();
+                    if ( vert != null ) {
+                        if ( hasZ.equals("") ) {
+                            String positive = vert.getPositive();
+                            if ( positive != null ) {
+                                geospatialCoverage.setAttribute("zpositive", positive);
+                            }
+                            String min = String.valueOf(vert.getMinValue());
+                            double size = vert.getMaxValue() - vert.getMinValue();
+                            String units = vert.getUnitsString();
+                            if ( units == null ) {
+                                units = "";
+                            }
+                            Element updown = new Element("updown", ns);
+                            Element zStart = new Element("start", ns);
+                            Element zSize = new Element("size",ns);
+                            Element zUnits = new Element("units", ns);
+                            Element zResolution = new Element("resolution", ns);
+                            zStart.setText(min);
+                            updown.addContent(zStart);
+                            zSize.setText(String.valueOf(size));
+                            updown.addContent(zSize);
+                            zUnits.setText(units);
+                            updown.addContent(zUnits);
+                            if ( !Double.isNaN(vert.getResolution()) ) {
+                                zResolution.setText(String.valueOf(vert.getResolution()));
+                                updown.addContent(zResolution);
+                            }
+                            geospatialCoverage.addContent(updown);
+
+                            double[] vs = vert.getValues();
+
+                            if ( vs != null ) {
+                                Element property = new Element("property", ns);
+                                property.setAttribute("name", "updownValues");
+                                String values = "";
+
+
+                                for ( int i = 0; i < vs.length; i++ ) {
+                                    values = values + String.valueOf(vs[i]) + " ";
+                                }
+                                property.setAttribute("value", values.trim());
+                                properties.add(property);
+                            } else {
+                                Element property = new Element("property", ns);
+                                property.setAttribute("name", "updownNumberOfPoints");
+                                property.setAttribute("value", String.valueOf(vert.getSize()));
+                                properties.add(property);
+                            }
+                        }
+
+                        hasZ = hasZ + rVar.getName() + " ";
+
+
+                    }
+                    TimeAxis taxis = rVar.getTimeAxis();
+
+
+                    if ( taxis != null ) {
+                        hasT = hasT + rVar.getName() + " ";
+                    }
+                }
+                if ( !hasZ.equals("") ) {
+                    Element hasZProperty = new Element("property", ns);
+                    hasZProperty.setAttribute("name", "hasZ");
+                    hasZProperty.setAttribute("value", hasZ.trim());
+                    properties.add(hasZProperty);
+                }
+                if ( !hasT.equals("") ) {
+                    Element hasTProperty = new Element("property", ns);
+                    hasTProperty.setAttribute("name", "hasT");
+                    hasTProperty.setAttribute("value", hasT.trim());
+                    properties.add(hasTProperty);
                 }
             }
-            if ( !hasZ.equals("") ) {
-                Element hasZProperty = new Element("property", ns);
-                hasZProperty.setAttribute("name", "hasZ");
-                hasZProperty.setAttribute("value", hasZ.trim());
-                properties.add(hasZProperty);
-            }
-            if ( !hasT.equals("") ) {
-                Element hasTProperty = new Element("property", ns);
-                hasTProperty.setAttribute("name", "hasT");
-                hasTProperty.setAttribute("value", hasT.trim());
-                properties.add(hasTProperty);
-            }
-        
+
         } else {
             if ( dataOne == null ) {
                 System.err.println("Data node information is null for "+parent+" ... "+leafNode.getUrl());
@@ -550,6 +655,7 @@ public class Clean implements Callable<String> {
         String timeStart = "";
         String timeEnd = "";
         long timeSize = 0;
+        boolean time_units_done = false;
         for ( int a = 0; a < aggs.size(); a++ ) {
             Leaf l = aggs.get(a);
             LeafDataset dataset = l.getLeafDataset();
@@ -558,64 +664,67 @@ public class Clean implements Callable<String> {
             if ( dataset.getVariables() != null && dataset.getVariables().size() > 0 ) {
                 List<NetCDFVariable> vars = dataset.getVariables();
                 boolean done = false;
-                boolean units = false;
+               
                 // Find the first variable that has a time axis and use it as the basis for the time data for this dataset.
-                for ( Iterator iterator = vars.iterator(); iterator.hasNext(); ) {
-                    NetCDFVariable netCDFVariable = (NetCDFVariable) iterator.next();
+                if ( !rescan ) {
+                    for ( Iterator iterator = vars.iterator(); iterator.hasNext(); ) {
+                        NetCDFVariable netCDFVariable = (NetCDFVariable) iterator.next();
 
-                    TimeAxis ta = netCDFVariable.getTimeAxis();
-                    if ( ta != null && !done) {
+                        TimeAxis ta = netCDFVariable.getTimeAxis();
+                        if ( ta != null && !done) {
 
-                        if ( !units ) {
-                            Element timeUnitsProperty = new Element("property", ns);
-                            timeUnitsProperty.setAttribute("name", "timeAxisUnits");
-                            timeUnitsProperty.setAttribute("value", ta.getUnitsString());
-                            properties.add(timeUnitsProperty);
+                            if ( !time_units_done ) {
+                                Element timeUnitsProperty = new Element("property", ns);
+                                timeUnitsProperty.setAttribute("name", "timeAxisUnits");
+                                timeUnitsProperty.setAttribute("value", ta.getUnitsString());
+                                properties.add(timeUnitsProperty);
 
-                            units = true;
-                        }
-
-                        done = true;
-                        aggregation.setAttribute("dimName", ta.getName());
-
-                        if ( ta != null ) {
-                            if ( a == 0 ) {
-                                timeStart = ta.getTimeCoverageStart();
+                                time_units_done = true;
                             }
-                            if ( a == aggs.size() - 1 ) {
-                                timeEnd = ta.getTimeCoverageEnd();
-                            }
-                            long tsize = ta.getSize();
-                            timeSize = timeSize + tsize;
 
-                            netcdf.setAttribute("ncoords", String.valueOf(tsize));
+                            done = true;
+                            aggregation.setAttribute("dimName", ta.getName());
+
+                            if ( ta != null ) {
+                                if ( a == 0 ) {
+                                    timeStart = ta.getTimeCoverageStart();
+                                }
+                                if ( a == aggs.size() - 1 ) {
+                                    timeEnd = ta.getTimeCoverageEnd();
+                                }
+                                long tsize = ta.getSize();
+                                timeSize = timeSize + tsize;
+
+                                netcdf.setAttribute("ncoords", String.valueOf(tsize));
+                            }
+                            aggregation.addContent(netcdf);
                         }
-                        aggregation.addContent(netcdf);
                     }
                 }
-
-                Element timeCoverageStart = new Element("property", ns);
-                timeCoverageStart.setAttribute("name", "timeCoverageStart");
-                timeCoverageStart.setAttribute("value", timeStart);
-                properties.add(timeCoverageStart);
-
-                Element timeSizeProperty = new Element("property", ns);
-                timeSizeProperty.setAttribute("name", "timeCoverageNumberOfPoints");
-                timeSizeProperty.setAttribute("value", String.valueOf(timeSize));
-                properties.add(timeSizeProperty);
-            }
+            }         
         }
+        if ( !rescan ) {
+            Element timeCoverageStart = new Element("property", ns);
+            timeCoverageStart.setAttribute("name", "timeCoverageStart");
+            timeCoverageStart.setAttribute("value", timeStart);
+            properties.add(timeCoverageStart);
 
-        Element time = new Element("timeCoverage", ns);
-        Element start = new Element("start", ns);
-        start.setText(timeStart);
-        Element end = new Element("end", ns);
-        end.setText(timeEnd);
-        time.addContent(start);
-        time.addContent(end);
+            Element timeSizeProperty = new Element("property", ns);
+            timeSizeProperty.setAttribute("name", "timeCoverageNumberOfPoints");
+            timeSizeProperty.setAttribute("value", String.valueOf(timeSize));
+            properties.add(timeSizeProperty);
+            Element time = new Element("timeCoverage", ns);
 
-        properties.add(time);
 
+            Element start = new Element("start", ns);
+            start.setText(timeStart);
+            Element end = new Element("end", ns);
+            end.setText(timeEnd);
+            time.addContent(start);
+            time.addContent(end);
+
+            properties.add(time);
+        }
         String name = "";
         for ( Iterator varIt = dataOne.getVariables().iterator(); varIt.hasNext(); ) {
             NetCDFVariable var = (NetCDFVariable) varIt.next();
@@ -646,38 +755,20 @@ public class Clean implements Callable<String> {
         }
 
         String dataURL;
-        if ( aggregating ) {            
-            dataURL = threddsServer;
-            if ( !dataURL.endsWith("/")) dataURL = dataURL + "/";
-            dataURL = dataURL+threddsContext+"/dodsC/"+name+"_aggregation";
-        } else {
-            dataURL = leafNode.getUrl();
-        }
-        Element viewer0Property = new Element("property", ns);
-        viewer0Property.setAttribute("name", "viewer_0");
-        viewer0Property.setAttribute("value", viewer_0+dataURL+viewer_0_description);
-
-        properties.add(viewer0Property);
-
-        Element viewer1Property = new Element("property", ns);
-        viewer1Property.setAttribute("name", "viewer_1");
-        viewer1Property.setAttribute("value", viewer_1+dataURL+viewer_1_description);
-
-        properties.add(viewer1Property);
-
-        Element viewer2Property = new Element("property", ns);
-        viewer2Property.setAttribute("name", "viewer_2");
-        viewer2Property.setAttribute("value", viewer_2+dataURL+viewer_2_description);
-
-        properties.add(viewer2Property);
-
-
+        
         if ( matchingDataset != null && aggregating) {
             String path = aggURL.getPath();
             path = path.substring(path.lastIndexOf("dodsC/")+6, path.lastIndexOf('/')+1);
             matchingDataset.setAttribute("urlPath", path+name+"_aggregation");
             matchingDataset.setAttribute("name", name);
+            dataURL = threddsServer;
+            if ( !dataURL.endsWith("/")) dataURL = dataURL + "/";
+            dataURL = dataURL+threddsContext+"/dodsC/"+path+name+"_aggregation";
+           
+        } else {
+            dataURL = leafNode.getUrl();
         }
+        
         if ( p != null ) {
             for ( int i = 1; i < aggs.size(); i++ ) {
                 Leaf l = aggs.get(i);
@@ -686,45 +777,64 @@ public class Clean implements Callable<String> {
             }
         }
 
-
+        String id;
         if ( matchingDataset != null ) {
+            
+           
             Element service = new Element("serviceName", ns);
             service.addContent( threddsServerName+"_compound");
+           
+            Element mymetadata = new Element("metadata", ns);
+            mymetadata.setAttribute("inherited", "true");
+            mymetadata.addContent(variables);
+            matchingDataset.addContent(0, mymetadata);
+            matchingDataset.addContent(ncml);
+            String tid = matchingDataset.getAttributeValue("ID");
+            id = ADDXMLProcessor.fixid(tid, dataURL);
+            matchingDataset.setAttribute("ID", id);
+            
+            
+            Element viewer0Property = new Element("property", ns);
+            viewer0Property.setAttribute("name", "viewer_0");
+            viewer0Property.setAttribute("value", viewer_0+dataURL+viewer_0_description);
+
+            properties.add(viewer0Property);
+
+            Element viewer1Property = new Element("property", ns);
+            viewer1Property.setAttribute("name", "viewer_1");
+            viewer1Property.setAttribute("value", viewer_1+dataURL+viewer_1_description);
+
+            properties.add(viewer1Property);
+
+            Element viewer2Property = new Element("property", ns);
+            viewer2Property.setAttribute("name", "viewer_2");
+            viewer2Property.setAttribute("value", viewer_2+dataURL+viewer_2_description);
+
+            properties.add(viewer2Property);
             matchingDataset.addContent(0, service);
             matchingDataset.addContent(0, geospatialCoverage);
             matchingDataset.addContent(0, properties);
-            Element varE = matchingDataset.getChild("variables", ns);
-            Element varEP = matchingDataset.getParentElement().getChild("variables", ns);
-            Element metadataP = matchingDataset.getParentElement().getChild("metadata", ns);
-            if ( varEP == null ) {
-                if (metadataP != null) {
-                    varEP = metadataP.getChild("variables", ns);
-                }
-            }
-            // This is a bit of a kludge because they could be in the grandparent, but probably not...
-            if ( varE == null && varEP == null ) {
-                matchingDataset.addContent(0, variables);
-            }
-            matchingDataset.addContent(ncml);
+            
+            
         }
     }
     private Set<String> removeRemoteServices(Document doc ) {
         Set<String> removedTypes = new HashSet<String>();
         List<Element> removedServiceElements = remove(doc, "service");
         remove(doc, "serviceName");
-//        Iterator<Element> metaIt = doc.getRootElement().getDescendants(new ElementFilter("metadata"));
-//        List<Parent> parents = new ArrayList<Parent>();
-//        while ( metaIt.hasNext() ) {
-//            Element meta = metaIt.next();
-//            List<Element> children = meta.getChildren();
-//            if ( children == null || children.size() == 0 ) {
-//                parents.add(meta.getParent());
-//            }
-//        }
-//        for ( Iterator parentIt = parents.iterator(); parentIt.hasNext(); ) {
-//            Parent parent = (Parent) parentIt.next();
-//            parent.removeContent(new ElementFilter("metadata"));
-//        }
+        Iterator<Element> metaIt = doc.getRootElement().getDescendants(new ElementFilter("metadata"));
+        List<Parent> parents = new ArrayList<Parent>();
+        while ( metaIt.hasNext() ) {
+            Element meta = metaIt.next();
+            List<Element> children = meta.getChildren();
+            if ( children == null || children.size() == 0 ) {
+                parents.add(meta.getParent());
+            }
+        }
+        for ( Iterator parentIt = parents.iterator(); parentIt.hasNext(); ) {
+            Parent parent = (Parent) parentIt.next();
+            parent.removeContent(new ElementFilter("metadata"));
+        }
         for ( Iterator servIt = removedServiceElements.iterator(); servIt.hasNext(); ) {
             Element service = (Element) servIt.next();
             String type = service.getAttributeValue("serviceType").toUpperCase();
@@ -740,31 +850,37 @@ public class Clean implements Callable<String> {
         service.setAttribute("serviceType", "compound");
         service.setAttribute("base", "");
         if ( remoteTypes.contains("WMS") ) {
+            rubric.addServices(1);
             addFullService(service, remoteServiceBase.replace("dodsC", "wms"), "WMS");
         } else {
             addService(service, "wms", "WMS");
         }
         if ( remoteTypes.contains("WCS") ) {
+            rubric.addServices(1);
             addFullService(service, remoteServiceBase.replace("dodsC", "wcs"), "WCS");
         } else {
             addService(service, "wcs", "WCS");
         }
         if ( remoteTypes.contains("NCML") ) {
+            rubric.addServices(1);
             addFullService(service, remoteServiceBase.replace("dodsC", "ncml"), "NCML");
         } else {
             addService(service, "ncml", "NCML");
         }
         if ( remoteTypes.contains("ISO") ) {
+            rubric.addServices(1);
             addFullService(service, remoteServiceBase.replace("dodsC", "iso"), "ISO");
         } else {
             addService(service, "iso", "ISO");
         }
         if ( remoteTypes.contains("UDDC") ) {
+            rubric.addServices(1);
             addFullService(service, remoteServiceBase.replace("dodsC", "uddc"), "UDDC");
         } else {
             addService(service, "uddc", "UDDC");
         }
         if ( remoteTypes.contains("OPENDAP") ) {
+            rubric.addServices(1);
             addFullService(service, remoteServiceBase, "OPENDAP");
         } else {
             addService(service, "dodsC", "OPeNDAP");
@@ -797,10 +913,23 @@ public class Clean implements Callable<String> {
         for ( Iterator<LeafNodeReference> leafIt = leaves.iterator(); leafIt.hasNext(); ) {
             LeafNodeReference leafNodeReference = leafIt.next();
             if ( leafNodeReference.getDataCrawlStatus() == DataCrawlStatus.FINISHED ) {
-                LeafDataset dataset = helper.getLeafDataset(parent, leafNodeReference.getUrl());
+                LeafDataset dataset = helper.getLeafDataset(leafNodeReference.getUrl());
                 if ( dataset != null ) { // Data set may be listed, but has not yet been crawled, but status should have caught this above
-                    // Only add the leaf data set to the aggregate if it's not an FMRC
-                    if ( !dataset.getUrl().contains("fmrc")) {
+                    // Some URL filtering still has to be done for the 2D FMRC that slip through the data set history attribute check for "FMRC 2D Dataset" and "FMRC Best Dataset".
+                    if ( ( dataset.getVariables() == null || dataset.getVariables().size() == 0 ) || dataset.getBadVariables().size() > 0 ) {
+                        rubric.addBadLeaves(1);
+                    }
+                    long start = dataset.getCrawlStartTime();
+                    long end = dataset.getCrawlEndTime();
+                    long scantime = end - start;
+                    if ( scantime >= Rubric.SLOW ) {
+                        rubric.addSlow(1);
+                    } else if ( scantime >= Rubric.MEDIUM && scantime < Rubric.SLOW ) {
+                        rubric.addMedium(1);
+                    } else if ( scantime < Rubric.MEDIUM ) {
+                        rubric.addFast(1);
+                    }
+                    if (!dataset.getUrl().endsWith("fmrc.ncd") ) {
                         String key = getAggregationSignature(dataset, false);                        
                         List<Leaf> datasets  = datasetGroups.get(key);
                         if ( datasets == null ) {
@@ -809,7 +938,11 @@ public class Clean implements Callable<String> {
                         }
                         datasets.add(new Leaf(leafNodeReference, dataset));
                     }
+                } else {
+                    rubric.addBadLeaves(1);
                 }
+            } else if ( leafNodeReference.getDataCrawlStatus() == DataCrawlStatus.NO_VARIABLES_FOUND ) {
+                rubric.addBadLeaves(1);
             }
         }
        
@@ -941,6 +1074,8 @@ public class Clean implements Callable<String> {
         if ( variables != null && variables.size() > 0 ) {
             NetCDFVariable one = variables.get(0);
             TimeAxis tone = one.getTimeAxis();
+            
+            
 
             if ( tone != null ) {
                 startTime = tone.getTimeCoverageStart();
@@ -952,14 +1087,40 @@ public class Clean implements Callable<String> {
                 if ( longname ) {
                     signature = signature + dsvar.getLongName();
                 }
-                // toString for each axis object gives a summary that makes up the signature.
-                signature = signature + dsvar.getName() + dsvar.getRank() + dsvar.getxAxis() + dsvar.getyAxis(); 
-                if ( dsvar.getTimeAxis() != null ) {
-                    signature = signature + dsvar.getTimeAxis();
+                List<StringAttribute> attrs = dsvar.getStringAttributes();
+                boolean latLon = false;
+                // These are coordinate variables.  They probably should have been eliminated in the data crawl, but since they weren't we'll get rid of them here.
+                for (Iterator attIt = attrs.iterator(); attIt.hasNext();) {
+                    StringAttribute stringAttribute = (StringAttribute) attIt.next();
+                    if ( stringAttribute.getName().toLowerCase().equals("standard_name")  && stringAttribute.getValue().get(0).toLowerCase().equals("latitude") || 
+                         stringAttribute.getName().toLowerCase().equals("standard_name")  && stringAttribute.getValue().get(0).toLowerCase().equals("longitude") ) {
+                        latLon = true;
+                    }
+                    if ( stringAttribute.getName().toLowerCase().equals("statistic") && dataset.getUrl().contains("esrl") ) {
+                        signature = signature+stringAttribute.getName()+stringAttribute.getValue().get(0);
+                    }
                 }
-                if ( dsvar.getVerticalAxis() != null ) {
-                    signature = signature + dsvar.getVerticalAxis();
+                if ( !latLon ) {
+
+                    // toString for each axis object gives a summary that makes up the signature.
+                    signature = signature + dsvar.getName() + dsvar.getRank() + dsvar.getxAxis() + dsvar.getyAxis(); 
+                    if ( dsvar.getTimeAxis() != null ) {
+                        TimeAxis t = dsvar.getTimeAxis();
+                        if ( t != null ) {
+                            String u = t.getUnitsString();
+                            if ( u != null && u.contains("0000-") ) {
+                                // Climatology units, do not aggregate...
+                                return JDOMUtils.MD5Encode(String.valueOf(Math.random()));
+                            }
+                        }
+                        signature = signature + dsvar.getTimeAxis();
+                    }
+                    if ( dsvar.getVerticalAxis() != null ) {
+                        signature = signature + dsvar.getVerticalAxis();
+                    }
+
                 }
+                
             }
         } else {
             // I don't know what the heck we're going to do with this data set since there are no variables, but we sure as heck ain't going to aggregate it.

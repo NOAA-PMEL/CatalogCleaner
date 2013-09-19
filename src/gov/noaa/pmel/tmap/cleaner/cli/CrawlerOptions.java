@@ -27,6 +27,8 @@ public class CrawlerOptions extends Options {
         addOption(url);
         Option force = new Option("f", "force", false, "Download everything again (catalogs and/or netCDF data) regardless of the status of the previous crawl.");
         addOption(force);
+        Option brief = new Option("b", "brief", false, "When making a report, only give totals for the top level children.");
+        addOption(brief);
         Option leaf = new Option("l", "leaf", true, "The OPeNDAP URL of a leaf node.");
         addOption(leaf);
         Option varcheck = new Option("v", "varcheck", false, "Check each data set for variables and recrawl if none are found.");

@@ -15,8 +15,8 @@ import org.datanucleus.api.jdo.JDOPersistenceManagerFactory;
 import org.joda.time.DateTime;
 
 public class TimeCrawlLeafNode extends DataCrawl {
-    public TimeCrawlLeafNode(JDOPersistenceManagerFactory pmf, String parent, String leafurl) {
-        super(pmf, null, parent, leafurl, true);
+    public TimeCrawlLeafNode(JDOPersistenceManagerFactory pmf, String leafurl) {
+        super(pmf, null, null, leafurl, true);
     }
 
     @Override
@@ -26,7 +26,7 @@ public class TimeCrawlLeafNode extends DataCrawl {
             helper = new PersistenceHelper(persistenceManager);
             Transaction tx = helper.getTransaction();
             tx.begin();
-            LeafDataset leafDataset = helper.getLeafDataset(url, leafurl);
+            LeafDataset leafDataset = helper.getLeafDataset(leafurl);
             LeafNodeReference leafNodeReference = helper.getLeafNodeReference(leafurl);
             System.out.println("Crawling "+leafNodeReference.getUrl()+" in thread "+Thread.currentThread().getId());
             updateLeafNodeTime(leafDataset);

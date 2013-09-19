@@ -56,7 +56,7 @@ public class ScanOne {
             if ( connectionURL.contains("database") ) {
                 connectionURL = connectionURL.replace("database", database);
             } else {
-                System.err.println("The conenctionURL string should use the name \"databast\" which will be substituted for each catalog" );
+                System.err.println("The conenctionURL string should use the name \"database\" which will be substituted for each catalog" );
                 System.exit(-1);
             }
             properties.setProperty("datanucleus.ConnectionURL", connectionURL);
@@ -72,7 +72,7 @@ public class ScanOne {
             tx.commit();
             System.out.println("Ending scan at "+DateTime.now().toString("yyyy-MM-dd HH:mm:ss"));
             // Check
-            LeafDataset leaf = helper.getLeafDataset(url, dataurl);
+            LeafDataset leaf = helper.getLeafDataset(dataurl);
             List<NetCDFVariable> variables = leaf.getVariables();
             if ( variables != null ) {
                 for ( Iterator varIt = variables.iterator(); varIt.hasNext(); ) {

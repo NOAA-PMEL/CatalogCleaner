@@ -86,10 +86,10 @@ public abstract class DataCrawl implements Callable<String> {
     public abstract String call() throws Exception; 
     
     protected LeafDataset crawlLeafNode(String parent, String url) throws Exception {
-        LeafDataset leaf = helper.getLeafDataset(parent, url);
+        LeafDataset leaf = helper.getLeafDataset(url);
         if ( leaf == null || force ) {
             if ( leaf == null ) {
-                leaf = new LeafDataset(parent, url);
+                leaf = new LeafDataset(url);
                 helper.save(leaf);
             }
             crawlLeafNode(leaf, parent, url);
@@ -119,6 +119,7 @@ public abstract class DataCrawl implements Callable<String> {
                 }
             };
             gridDs = (GridDataset) FeatureDatasetFactoryManager.open(FeatureType.GRID, url, cancelTask, null);
+            
             if ( gridDs == null ) {
                 gridDs = (GridDataset) FeatureDatasetFactoryManager.open(FeatureType.FMRC, url, cancelTask, null);
             } 
@@ -158,13 +159,15 @@ public abstract class DataCrawl implements Callable<String> {
                                 timeAxis.setMaxValue(maxvalue);
                                 String start = timeAxis.getTimeCoverageStart();
                                 String end = timeAxis.getTimeCoverageEnd();
+                                long size = timeAxis.getSize();
                                 DateRange range = gcs.getDateRange();
                                 setTime(timeAxis, tAxis, range);
                                 String nstart = timeAxis.getTimeCoverageStart();;
                                 String nend = timeAxis.getTimeCoverageEnd();
+                                long nsize = timeAxis.getSize();
                                 if ( nstart != null && nend != null ) {
                                     if ( !nstart.equals(start) || !nend.equals(end) ) {
-                                        System.out.println("Time change for "+url+"Start: "+start+" now "+nstart+" End: "+end+" now "+nend);
+                                        System.out.println("Time change for "+leafurl+"==>    Start: "+start+" now "+nstart+" End: "+end+" now "+nend+"Size: "+size+" now "+nsize);
                                     }
                                 }
                             } catch ( Exception e) {
@@ -193,31 +196,48 @@ public abstract class DataCrawl implements Callable<String> {
     }
     protected void crawlLeafNode(LeafDataset leaf, String parent, String url ) {
         try {
+            if ( url.endsWith("_fmrc.ncd") ) {
+                leaf.setVariables(new ArrayList<NetCDFVariable>());
+                return;
+            }
             GridDataset gridDs = readSource(url);
-            if ( gridDs != null ) {
+            if ( gridDs == null ) {
+                CatalogComment comment = new CatalogComment();
+                comment.setComment("Unable to find any grids in this data set using the CF conventions.");
+                leaf.setComment(comment);
+                return;
+            }
+            Attribute history = gridDs.findGlobalAttributeIgnoreCase("history");
+            boolean fmrc = false;
+            if ( history != null ) {
+                String value = history.getStringValue();
+                if ( value != null ) {
+                    if ( value.contains("FMRC 2D Dataset") ) {
+                        fmrc = true;
+                        leaf.setVariables(new ArrayList<NetCDFVariable>());
+                    }
+                }
+            }
+            if ( gridDs != null && !fmrc ) {
                 List<GridDatatype> grids = gridDs.getGrids();
                 List<NetCDFVariable> vars = new ArrayList<NetCDFVariable>();
+                List<NetCDFVariable> badvars = new ArrayList<NetCDFVariable>();
                 for(int i = 0; i<grids.size(); i++){
                     NetCDFVariable var = crawlNewVariable(grids.get(i));
-                    if ( var != null ) {
+                    if ( var != null && var.getError().equals("none") ) {
                         vars.add(var);
+                    } else {
+                        badvars.add(var);
                     }
                 }
                 leaf.setVariables(vars);
+                leaf.setBadVariables(badvars);
             }
         } catch (Exception e) {
             System.err.println("netCDF variable crawling of "+leaf.getUrl()+" halted with "+e);
-
-            CatalogComment comment = new CatalogComment();
-            comment.setComment(e.getMessage());
-            leaf.setComment(comment);
         }
         catch (Error e) {
             System.err.println("netCDF variable crawling of "+leaf.getUrl()+" halted with "+e);
-
-            CatalogComment comment = new CatalogComment();
-            comment.setComment(e.getMessage());
-            leaf.setComment(comment);
         }
     }
     private NetCDFVariable crawlNewVariable(GridDatatype grid) {
@@ -353,8 +373,27 @@ public abstract class DataCrawl implements Callable<String> {
         
         
         if ( gcs.hasTimeAxis() ) {
+            CoordinateAxis1DTime timeAxis1D = null;
             TimeAxis timeAxis = new TimeAxis();
             CoordinateAxis tAxis = gcs.getTimeAxis();
+            if ( tAxis instanceof CoordinateAxis1DTime ) {
+                timeAxis1D = (CoordinateAxis1DTime) tAxis;
+                double[] times = timeAxis1D.getCoordValues();
+                if ( times.length > 0 ) {
+                    for (int i = 1; i < times.length; i++) {
+                        if ( !((times[i] - times[i-1]) > 0.d) ) {
+                            System.err.println("Returning a null because the time axis exists, but is not monotonic.");
+                            int im1 = i-1;                    
+                            var.setError("Time axis is not monotonic at "+i+" with values "+times[i-1]+" at "+im1+" and "+times[i]+" at "+i);
+                            return var;
+                        }
+                    }
+                } else {
+                    System.err.println("Returning a null because the time axis exists, but has no values in it.");
+                    var.setError("Time axis exists, but has no values in it.");
+                    return var;
+                }
+            }
             timeAxis.setBoundaryRef(tAxis.getBoundaryRef());
             double minvalue;
             double maxvalue;
@@ -367,7 +406,8 @@ public abstract class DataCrawl implements Callable<String> {
             } catch ( Exception e) {
                 // This is not a double valued axis.  We're skipping it for now.  :-)
                 System.err.println("Returning a null variable because of "+e.getLocalizedMessage());
-                return null;
+                var.setError("Procesing variable threw an error "+e.getLocalizedMessage());
+                return var;
             }
 
             timeAxis.setIsContiguous(tAxis.isContiguous());
@@ -417,7 +457,8 @@ public abstract class DataCrawl implements Callable<String> {
             var.setyAxis(yAxis);
         } catch ( Exception e ) {
             System.err.println("Returning a null variable because of "+e.getLocalizedMessage());
-            return null;
+            var.setError("Processing variable threw an error: "+e.getLocalizedMessage());
+            return var;
         }
        
         CoordinateAxis xCoordAxis = gcs.getXHorizAxis();
@@ -427,7 +468,8 @@ public abstract class DataCrawl implements Callable<String> {
             var.setxAxis(xAxis);
         } catch (Exception e) {
             System.err.println("Returning a null variable because of "+e.getLocalizedMessage());
-            return null;
+            var.setError("Processing variable threw an error: "+e.getLocalizedMessage());
+            return var;
         }
     
         return var;
@@ -456,7 +498,7 @@ public abstract class DataCrawl implements Callable<String> {
             }
         }
     }
-    private GeoAxis makeGeoAxis (String type, CoordinateAxis axis) throws Exception {
+    public static GeoAxis makeGeoAxis (String type, CoordinateAxis axis) throws Exception {
         GeoAxis geoAxis = new GeoAxis();
         geoAxis.setType(type);
         geoAxis.setBoundaryRef(axis.getBoundaryRef());

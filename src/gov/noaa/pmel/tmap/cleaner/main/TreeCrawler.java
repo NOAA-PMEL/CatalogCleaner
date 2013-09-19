@@ -99,30 +99,18 @@ public class TreeCrawler extends Crawler {
 
                 if ( catalog != null && !catalog.hasBestTimeSeries() ) {
                     List<CatalogReference> refs = catalog.getCatalogRefs();
-                    List<CatalogReference> remove = new ArrayList();
-                    for ( Iterator refsIt = refs.iterator(); refsIt.hasNext(); ) {
-                        CatalogReference ref = (CatalogReference) refsIt.next();
-                        for ( int i = 0; i < exclude.size(); i++ ) {
-                            if ( Pattern.matches(exclude.get(i), ref.getUrl())) {
-                                remove.add(ref);
-                            }
-                        }
-                        for ( int i = 0; i < excludeCatalog.size(); i++ ) {
-                            if ( excludeCatalog.get(i).equals(ref.getUrl()) ) {
-                                remove.add(ref);
-                            }
-                        }
-                    }
-                    refs.removeAll(remove);
+                    
                     for ( Iterator refsIt = refs.iterator(); refsIt.hasNext(); ) {
                         CatalogReference catalogReference = (CatalogReference) refsIt.next();
-                        String childURL = catalogReference.getUrl();
-                        TreeCrawl crawl = new TreeCrawl(helper, catalog.getUrl(), childURL, force);
-                        Transaction tx = helper.getTransaction();
-                        tx.begin();
-                        TreeCrawlResult futureChild = crawl.call();
-                        tx.commit();
-                        futureChildren.add(futureChild);
+                        if ( !skip(catalogReference) ) {
+                            String childURL = catalogReference.getUrl();
+                            TreeCrawl crawl = new TreeCrawl(helper, catalog.getUrl(), childURL, force);
+                            Transaction tx = helper.getTransaction();
+                            tx.begin();
+                            TreeCrawlResult futureChild = crawl.call();
+                            tx.commit();
+                            futureChildren.add(futureChild);
+                        }
                     }
 
                 } else {

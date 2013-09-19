@@ -4,14 +4,12 @@ import gov.noaa.pmel.tmap.cleaner.jdo.LeafNodeReference;
 
 public class CrawlableLeafNode {
     private String root;
-    private String parent;
     private LeafNodeReference leafNodeReference;
     
     
-    public CrawlableLeafNode(String root, String parent, LeafNodeReference leafNodeReference) {
+    public CrawlableLeafNode(String root, LeafNodeReference leafNodeReference) {
         super();
         this.root = root;
-        this.parent = parent;
         this.leafNodeReference = leafNodeReference;
     }
     public String getRoot() {
@@ -19,12 +17,6 @@ public class CrawlableLeafNode {
     }
     public void setRoot(String root) {
         this.root = root;
-    }
-    public String getParent() {
-        return parent;
-    }
-    public void setParent(String parent) {
-        this.parent = parent;
     }
     public LeafNodeReference getLeafNodeReference() {
         return leafNodeReference;

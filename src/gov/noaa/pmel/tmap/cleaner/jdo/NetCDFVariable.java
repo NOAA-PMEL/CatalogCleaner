@@ -18,6 +18,10 @@ public class NetCDFVariable {
     private String description;
     
     @Persistent
+    @Column(length=1024)
+    private String error = "none";
+    
+    @Persistent
     private String info;
     
     @Persistent
@@ -84,7 +88,6 @@ public class NetCDFVariable {
     @Persistent
     private List<ShortAttribute> shortAttributes;
     
-
     public List<ShortAttribute> getShortAttributes() {
         return shortAttributes;
     }
@@ -189,6 +192,14 @@ public class NetCDFVariable {
         this.description = description;
     }
 
+    public String getError() {
+        return error;
+    }
+
+    public void setError(String error) {
+        this.error = error;
+    }
+
     public String getInfo() {
         return info;
     }
@@ -276,7 +287,6 @@ public class NetCDFVariable {
     public void setVerticalAxis(VerticalAxis zAxis) {
         this.verticalAxis = zAxis;
     }
-
 
     public enum Projection{
         AlbersEqualArea,

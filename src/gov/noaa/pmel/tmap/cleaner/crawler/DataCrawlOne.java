@@ -19,9 +19,9 @@ import org.joda.time.DateTime;
 
 public class DataCrawlOne extends DataCrawl implements Callable<String> {
     private LeafNodeReference leafNodeReference;
-    public DataCrawlOne(JDOPersistenceManagerFactory pmf, String root, String parent, LeafNodeReference leafNodeReference, boolean force) {
+    public DataCrawlOne(JDOPersistenceManagerFactory pmf, String root, LeafNodeReference leafNodeReference, boolean force) {
         
-        super(pmf, root, parent, leafNodeReference.getUrl(), force);
+        super(pmf, root, null, leafNodeReference.getUrl(), force);
         this.leafNodeReference = leafNodeReference;
         
         
@@ -42,7 +42,11 @@ public class DataCrawlOne extends DataCrawl implements Callable<String> {
         tx.begin();
         System.out.println("Crawling "+leafNodeReference.getUrl()+" in thread "+Thread.currentThread().getId());
         try {
+            long before = System.currentTimeMillis();
             LeafDataset leaf = crawlLeafNode(url, leafurl);
+            long after = System.currentTimeMillis();
+            leaf.setCrawlStartTime(before);
+            leaf.setCrawlEndTime(after);
             List<NetCDFVariable> vars = leaf.getVariables();
             if ( vars != null && vars.size() > 0 ) {
                 leafNodeReference.setDataCrawlStatus(DataCrawlStatus.FINISHED);

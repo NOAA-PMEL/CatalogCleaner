@@ -14,9 +14,15 @@ public class LeafDataset {
     @Column(length=500)
     private String url;
     
+//    @Persistent
+//    @Column(length=500)
+//    private String parent;
+    
     @Persistent
-    @Column(length=500)
-    private String parent;
+    long crawlStartTime = 0l;
+    
+    @Persistent
+    long crawlEndTime = 0l;
     
     @Persistent
     CatalogComment comment;
@@ -24,9 +30,11 @@ public class LeafDataset {
     @Persistent
     List<NetCDFVariable> variables;
     
+    @Persistent
+    List<NetCDFVariable> badVariables;
+    
 
-    public LeafDataset(String parent, String url) {
-        this.parent = parent;
+    public LeafDataset(String url) {
         this.url = url;
     }
 
@@ -36,14 +44,6 @@ public class LeafDataset {
 
     public void setComment(CatalogComment comment) {
         this.comment = comment;
-    }
-
-    public String getParent() {
-        return parent;
-    }
-
-    public void setParent(String parent) {
-        this.parent = parent;
     }
 
     public String getUrl() {
@@ -60,6 +60,30 @@ public class LeafDataset {
 
     public void setVariables(List<NetCDFVariable> variables) {
         this.variables = variables;
+    }
+
+    public long getCrawlStartTime() {
+        return crawlStartTime;
+    }
+
+    public void setCrawlStartTime(long crawlStartTime) {
+        this.crawlStartTime = crawlStartTime;
+    }
+
+    public long getCrawlEndTime() {
+        return crawlEndTime;
+    }
+
+    public void setCrawlEndTime(long crawlEndTime) {
+        this.crawlEndTime = crawlEndTime;
+    }
+
+    public List<NetCDFVariable> getBadVariables() {
+        return badVariables;
+    }
+
+    public void setBadVariables(List<NetCDFVariable> badVariables) {
+        this.badVariables = badVariables;
     }
 
     public String getRepresentativeTime() {

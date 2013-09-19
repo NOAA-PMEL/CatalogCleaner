@@ -35,6 +35,7 @@ import java.util.regex.Pattern;
 
 import javax.jdo.JDOHelper;
 import javax.jdo.PersistenceManager;
+import javax.jdo.Transaction;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -77,21 +78,24 @@ select url,timecoverageend from leafdataset, netcdfvariable, timeaxis where netc
      */
     public static void main(String[] args) {
         try {
-            Map<String, String> updates = new HashMap<String, String>();
+            List<String> updates = new ArrayList<String>();
             init(false, args);      
             System.out.println("Starting time update data crawl work at "+DateTime.now().toString("yyyy-MM-dd HH:mm:ss"));
             // Get the data sets that need updating, then work backward to the references to update their status and update time.
             int total = 0;
-            List<LeafDataset> datasets = helper.getDatasetsEndingThisYear();
-            System.out.println(datasets.size()+" dataset found.");
+            Transaction tx = helper.getTransaction();
+            tx.begin();
+            List<LeafDataset> datasets = helper.getDatasetsEndingInYear(String.valueOf(yr));
+            System.out.println(datasets.size()+" dataset found ending in "+yr);
             for ( Iterator leafIt = datasets.iterator(); leafIt.hasNext(); ) {
                 LeafDataset leafDataset = (LeafDataset) leafIt.next();
-                updates.put(leafDataset.getUrl(), leafDataset.getParent());
+                updates.add(leafDataset.getUrl());
             }
-            for ( Iterator updateIt = updates.keySet().iterator(); updateIt.hasNext(); ) {
+            tx.commit();
+            for ( Iterator updateIt = updates.iterator(); updateIt.hasNext(); ) {
                 String url = (String) updateIt.next();
-                TimeCrawlLeafNode timeCrawlLeafNode = new TimeCrawlLeafNode(pmf, updates.get(url), url);
-                System.out.println("Queuing "+ url+" in "+updates.get(url));
+                TimeCrawlLeafNode timeCrawlLeafNode = new TimeCrawlLeafNode(pmf, url);
+                System.out.println("Queuing "+ url);
                 completionPool.submit(timeCrawlLeafNode);
                 total++;
             }

@@ -14,6 +14,7 @@ import javax.jdo.PersistenceManager;
 
 import gov.noaa.pmel.tmap.cleaner.cli.CrawlerOptions;
 import gov.noaa.pmel.tmap.cleaner.jdo.Catalog;
+import gov.noaa.pmel.tmap.cleaner.jdo.CatalogReference;
 import gov.noaa.pmel.tmap.cleaner.jdo.GeoAxis;
 import gov.noaa.pmel.tmap.cleaner.jdo.LeafDataset;
 import gov.noaa.pmel.tmap.cleaner.jdo.LeafNodeReference;
@@ -68,25 +69,20 @@ public class Dumper {
             System.out.println("Starting dump at "+DateTime.now().toString("yyyy-MM-dd HH:mm:ss"));
             helper = new PersistenceHelper(persistenceManager);
             if ( dataurl != null ) {
-                LeafDataset leaf = helper.getLeafDataset(url, dataurl);
+                LeafDataset leaf = helper.getLeafDataset(dataurl);
                 System.out.println("Report for: "+dataurl);
                 if ( leaf != null ) {
                     dump(leaf);
                 }
             } else {
-                Catalog catalog = helper.getCatalog(parent, url);
+                Catalog catalog = null;
+                if ( url != null ) {
+                    catalog = helper.getCatalog(parent, url);
+                } else {
+                    catalog = helper.getCatalog(parent, parent);
+                }               
                 if ( catalog != null ) {
-                    List<LeafNodeReference> leaves = catalog.getLeafNodes();
-                    for ( Iterator leafIt = leaves.iterator(); leafIt.hasNext(); ) {
-                        LeafNodeReference leafNodeReference = (LeafNodeReference) leafIt.next();
-                        LeafDataset leaf = helper.getLeafDataset(url, leafNodeReference.getUrl());
-                        if ( leaf != null ) {
-                            System.out.println("Report for "+leafNodeReference.getUrl());
-                            dump(leaf);
-                        } else {
-                            System.out.println("Leaf data set null for "+leafNodeReference.getUrl());
-                        }
-                    }
+                    dumpCatalog(catalog);
                 } else {
                     System.out.println("Catalog for "+parent+" and "+url+" is null.");
                 }
@@ -107,6 +103,30 @@ public class Dumper {
             e.printStackTrace();
         }
     }
+    private static void dumpCatalog(Catalog catalog) {
+        List<LeafNodeReference> leaves = catalog.getLeafNodes();
+        for ( Iterator leafIt = leaves.iterator(); leafIt.hasNext(); ) {
+            LeafNodeReference leafNodeReference = (LeafNodeReference) leafIt.next();
+            System.out.println("Report for "+leafNodeReference.getUrl());
+            if ( leafNodeReference.getDataCrawlStatus() != LeafNodeReference.DataCrawlStatus.FINISHED ) {
+                System.out.println("\tStatus for "+leafNodeReference.getUrl()+" is "+leafNodeReference.getDataCrawlStatus());
+            }
+            LeafDataset leaf = helper.getLeafDataset(leafNodeReference.getUrl());
+            if ( leaf != null ) {
+                dump(leaf);
+            } else {
+                System.out.println("\tLeaf data set null for "+leafNodeReference.getUrl());
+            }
+        }
+        List<CatalogReference> refs = catalog.getCatalogRefs();
+        for (Iterator refIt = refs.iterator(); refIt.hasNext();) {
+            CatalogReference catalogReference = (CatalogReference) refIt.next();
+            Catalog cat = helper.getCatalog(catalog.getUrl(), catalogReference.getUrl());
+            if ( cat != null ) {
+                dumpCatalog(cat);
+            }
+        }
+    }
     private static void dump(LeafDataset leaf) {
         List<NetCDFVariable> variables = leaf.getVariables();
         if ( variables != null ) {
@@ -122,7 +142,6 @@ public class Dumper {
                 TimeAxis t = netCDFVariable.getTimeAxis();
                 if ( t != null ) System.out.println("\t\tT-Axis: "+t.getTimeCoverageStart()+" "+t.getTimeCoverageEnd());
                 if ( t != null ) System.out.println("\t\tT-Axis: "+t.getMinValue()+" "+t.getMaxValue());
-                if ( t != null ) System.out.println("\t\tT-Axis: "+t.getTimeCoverageStart()+" "+t.getTimeCoverageEnd());
                 if ( t != null ) System.out.println("\t\tT-Axis: "+t.getSize());
 
             }
