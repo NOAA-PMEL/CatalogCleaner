@@ -35,8 +35,11 @@ public class Rubric {
     private int fast;
     private int medium;
     private int slow;
+    private String errorFile = null;
     private List<String> children = new ArrayList<String>();
-    
+    private List<String> missingServices = new ArrayList<String>();
+   
+
     public static long SLOW = 30000l;
     public static long MEDIUM = 2500l; 
     
@@ -49,6 +52,12 @@ public class Rubric {
     public void addChild(String url) {
         children.add(url);
     }
+    public String getErrorFile() {
+        return errorFile;
+    }
+    public void setErrorFile(String errorFile) {
+        this.errorFile = errorFile;
+    }
     public String getUrl() {
         return url;
     }
@@ -60,6 +69,12 @@ public class Rubric {
     }
     public void setParent(String parent) {
         this.parent = parent;
+    }
+    public List<String> getMissingServices() {
+        return missingServices;
+    }
+    public void setMissingServices(List<String> missingServices) {
+        this.missingServices = missingServices;
     }
     public String getParentJson() {
         return parentJson;

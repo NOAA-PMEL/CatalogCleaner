@@ -317,7 +317,7 @@ public class CrawlReport extends Crawler {
             }
             List<NetCDFVariable> goodVars = leaf.getVariables();
             if ( goodVars.size() == 0 && vars.size() == 0 ) {
-                failvars.append("Dataset "+leaf.getUrl()+" was scanned, but no variables where found.  Scanning threw an unexpected error.");
+                failvars.append("Dataset "+leaf.getUrl()+" was scanned, but no CF variables where found.");
             }
             CatalogComment comment = leaf.getComment();
             if ( comment != null ) {
