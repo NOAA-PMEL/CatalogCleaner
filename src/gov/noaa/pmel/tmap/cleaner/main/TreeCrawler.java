@@ -102,7 +102,8 @@ public class TreeCrawler extends Crawler {
                     
                     for ( Iterator refsIt = refs.iterator(); refsIt.hasNext(); ) {
                         CatalogReference catalogReference = (CatalogReference) refsIt.next();
-                        if ( !skip(catalogReference) ) {
+                       
+                        if ( !skipRegex(catalogReference) && !skip(catalogReference) ) {
                             String childURL = catalogReference.getUrl();
                             TreeCrawl crawl = new TreeCrawl(helper, catalog.getUrl(), childURL, force);
                             Transaction tx = helper.getTransaction();

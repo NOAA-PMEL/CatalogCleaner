@@ -4,11 +4,9 @@
 	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
 	<classpathentry kind="lib" path="lib/commons-cli-1.2.jar"/>
 	<classpathentry kind="lib" path="lib/log4j-1.2.13.jar"/>
-	<classpathentry kind="lib" path="lib/netcdfAll-4.2.jar"/>
 	<classpathentry kind="lib" path="lib/joda-convert-1.2.jar"/>
 	<classpathentry kind="lib" path="lib/joda-time-2.1.jar"/>
 	<classpathentry kind="lib" path="lib/jdom-2.0.2.jar"/>
-	<classpathentry kind="lib" path="lib/addXML.jar"/>
 	<classpathentry kind="lib" path="/home/rhs/datanucleus-accessplatform-full-deps-3.1.1/lib/datanucleus-rdbms-3.1.1.jar"/>
 	<classpathentry kind="lib" path="/home/rhs/datanucleus-accessplatform-full-deps-3.1.1/deps/asm-4.0.jar"/>
 	<classpathentry kind="lib" path="/home/rhs/datanucleus-accessplatform-full-deps-3.1.1/lib/datanucleus-api-jdo-3.1.1.jar"/>
@@ -19,5 +17,10 @@
 	<classpathentry kind="lib" path="lib/commons-dbcp-1.4.jar"/>
 	<classpathentry kind="lib" path="lib/commons-pool-1.6.jar"/>
 	<classpathentry kind="lib" path="lib/commons-collections-3.2.1.jar"/>
+	<classpathentry kind="lib" path="lib/addXML.jar"/>
+	<classpathentry kind="lib" path="lib/gson-2.2.4.jar"/>
+	<classpathentry kind="lib" path="lib/netcdfAll-4.6.jar"/>
+	<classpathentry kind="lib" path="lib/commons-httpclient-3.1.jar"/>
+	<classpathentry kind="lib" path="lib/jdom.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>

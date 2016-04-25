@@ -60,7 +60,6 @@ import ucar.unidata.geoloc.projection.RotatedLatLon;
 import ucar.unidata.geoloc.projection.RotatedPole;
 import ucar.unidata.geoloc.projection.Stereographic;
 import ucar.unidata.geoloc.projection.TransverseMercator;
-import ucar.unidata.geoloc.projection.UtmCoordinateConversion;
 import ucar.unidata.geoloc.projection.UtmProjection;
 import ucar.unidata.geoloc.projection.VerticalPerspectiveView;
 
@@ -117,6 +116,11 @@ public abstract class DataCrawl implements Callable<String> {
                 public void setError(String err) {
                     cancelMessage.setComment("CANCEL TASK _ taking too long: " + err);
                 }
+				@Override
+				public void setProgress(String arg0, int arg1) {
+					// no need
+					
+				}
             };
             gridDs = (GridDataset) FeatureDatasetFactoryManager.open(FeatureType.GRID, url, cancelTask, null);
             
@@ -167,7 +171,14 @@ public abstract class DataCrawl implements Callable<String> {
                                 long nsize = timeAxis.getSize();
                                 if ( nstart != null && nend != null ) {
                                     if ( !nstart.equals(start) || !nend.equals(end) ) {
-                                        System.out.println("Time change for "+leafurl+"==>    Start: "+start+" now "+nstart+" End: "+end+" now "+nend+"Size: "+size+" now "+nsize);
+                                        System.out.println("Time change for "+leafurl+"==>    Start: "+start+" now "+nstart+" End: "+end+" now "+nend+" Size: "+size+" now "+nsize);
+                                        List<Catalog> catalogs = helper.getCatalogThatContainsDataset(leafurl);
+                                        if ( catalogs != null ) {
+                                            for (Iterator iterator = catalogs.iterator(); iterator.hasNext();) {
+                                                Catalog catalog = (Catalog) iterator.next();
+                                                System.out.println("Update WAF for "+catalog.getUrl());
+                                            }
+                                        }
                                     }
                                 }
                             } catch ( Exception e) {
@@ -175,7 +186,7 @@ public abstract class DataCrawl implements Callable<String> {
                                 System.err.println("Time not updated: "+e.getLocalizedMessage());
                             }
                         }
-                    }
+                    } 
                 }
             }
         } catch (Exception e) {
@@ -198,6 +209,9 @@ public abstract class DataCrawl implements Callable<String> {
         try {
             if ( url.endsWith("_fmrc.ncd") ) {
                 leaf.setVariables(new ArrayList<NetCDFVariable>());
+                CatalogComment comment = new CatalogComment();
+                comment.setComment("This data set appears to be an FMRC with run and forecast times.  We aren't handling those yet.");
+                leaf.setComment(comment);
                 return;
             }
             GridDataset gridDs = readSource(url);
@@ -354,9 +368,6 @@ public abstract class DataCrawl implements Callable<String> {
         }
         else if(p instanceof TransverseMercator ) {
             var.setProjection(NetCDFVariable.Projection.TransverseMercator);
-        }
-        else if(p instanceof UtmCoordinateConversion ) {
-            var.setProjection(NetCDFVariable.Projection.UtmCoordinateConversion);
         }
         else if(p instanceof UtmProjection ) {
             var.setProjection(NetCDFVariable.Projection.UtmProjection);

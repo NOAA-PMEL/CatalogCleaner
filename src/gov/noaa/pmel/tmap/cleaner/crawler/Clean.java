@@ -89,8 +89,8 @@ public class Clean implements Callable<String> {
     private Rubric rubric = new Rubric();
     private Errors errors = new Errors();
     
-    private String rootrubric = null;
-    private String treeroot = null;
+    private static String rootrubric = null;
+    private static String treeroot = null;
     
     public Clean(JDOPersistenceManagerFactory pmf, CleanableCatalog cleanableCatalog, String threddsServer, String threddsServerName, String threddsContext, List<String> exclude, List<String> excludeCatalog, Map<String, List<String>> excludeDataset) {
         super();
@@ -145,12 +145,7 @@ public class Clean implements Callable<String> {
 
             rubric.setUrl(catalog.getUrl());
             rubric.setParent(catalog.getParent());
-            if ( !catalog.getParent().equals(treeroot) ) {
-                rubric.setParentJson(Clean.getRubricFilePath(catalog.getParent()));
-            } else {
-                // This catalog's parent is the root rubric.
-                rubric.setParentJson(rootrubric);
-            }
+            rubric.setParentJson(Clean.getRubricFilePath(catalog.getParent()));
             
             
             if ( catalog.getLeafNodes() != null && catalog.getLeafNodes().size() > 0 ) {
@@ -160,6 +155,7 @@ public class Clean implements Callable<String> {
                 rubric.setErrorFile(fn);           
                 
                 List<LeafNodeReference> leaves = catalog.getLeafNodes();
+                
                 
                 // This is a huge risk.  Use the first one, we'll see what happens...
                 String path = leaves.get(0).getUrlPath();
@@ -175,7 +171,7 @@ public class Clean implements Callable<String> {
                     String key = aggIt.next();
                    
                     List<Leaf> aggs = aggregates.get(key);
-                    if ( aggs.size() == 1 ) {
+                    if ( aggs.size() == 1 && aggs.get(0).getLeafDataset().getVariables() != null && aggs.get(0).getLeafDataset().getVariables().size() > 0 ) {
                         rubric.addAggregated(1);
                     }
                     // Remove the old data set references and add the new ncml.
@@ -220,6 +216,7 @@ public class Clean implements Callable<String> {
             PrintStream rout = null;
             if ( catalog.getUrl().equals(catalog.getParent()) ) {
                 fout = new PrintStream("CleanCatalog.xml"); 
+                rubric.setCleanURL(threddsServer+threddsContext+"CleanCatalog.xml");
             } else {
                 String base = getFileBase(catalog.getUrl());
                 File ffile = new File(base);
@@ -227,6 +224,7 @@ public class Clean implements Callable<String> {
                 File outFile = new File(ffile.getPath()+File.separator+getFileName(catalog.getUrl()));              
                 fout = new PrintStream(outFile);
                 System.out.println("Writing "+catalog.getUrl()+" \n\t\tto "+outFile.getAbsolutePath());
+                rubric.setCleanURL(threddsServer+threddsContext+"/"+outFile.getAbsolutePath().substring(outFile.getAbsolutePath().indexOf("CleanCatalogs")));
             }
             if ( errors.getMessages().size() == 0 ) {
                 errors.setFilename(null);
@@ -254,8 +252,14 @@ public class Clean implements Callable<String> {
         return catalogURL.getPath().substring(catalogURL.getPath().lastIndexOf("/"));
     }
     public static String getRubricFilePath(String url) throws MalformedURLException {
-        String bf = Clean.getFileName(url).replace(".xml", "");
-        return Clean.getFileBase(url)+bf+"_rubric.json";
+        if ( !url.equals(treeroot) ) {
+            String bf = Clean.getFileName(url).replace(".xml", "");
+            return Clean.getFileBase(url)+bf+"_rubric.json";            
+        } else {
+            // This catalog's parent is the root rubric.
+            return rootrubric;
+        }
+        
     }
     public static String getErrorsFilePath(String url) throws MalformedURLException {
         String bf = Clean.getFileName(url).replace(".xml", "");
@@ -694,7 +698,7 @@ public class Clean implements Callable<String> {
                                 timeUnitsProperty.setAttribute("name", "timeAxisUnits");
                                 timeUnitsProperty.setAttribute("value", ta.getUnitsString());
                                 properties.add(timeUnitsProperty);
-
+                          
                                 time_units_done = true;
                             }
 
@@ -729,9 +733,9 @@ public class Clean implements Callable<String> {
             timeSizeProperty.setAttribute("name", "timeCoverageNumberOfPoints");
             timeSizeProperty.setAttribute("value", String.valueOf(timeSize));
             properties.add(timeSizeProperty);
+            
+            
             Element time = new Element("timeCoverage", ns);
-
-
             Element start = new Element("start", ns);
             start.setText(timeStart);
             Element end = new Element("end", ns);
@@ -884,6 +888,7 @@ public class Clean implements Callable<String> {
             rubric.addServices(1);
             addFullService(service, remoteServiceBase.replace("dodsC", "ncml"), "NCML");
         } else {
+            missing_services.add("NCML");
             addService(service, "ncml", "NCML");
         }
         if ( remoteTypes.contains("ISO") ) {
@@ -904,8 +909,8 @@ public class Clean implements Callable<String> {
             rubric.addServices(1);
             addFullService(service, remoteServiceBase, "OPENDAP");
         } else {
-            missing_services.add("OPeNDAP");
-            addService(service, "dodsC", "OPeNDAP");
+            missing_services.add("OPENDAP");
+            addService(service, "dodsC", "OPENDAP");
         }
         rubric.setMissingServices(missing_services);
         // Put this at the top of the document in index 0.
@@ -946,28 +951,29 @@ public class Clean implements Callable<String> {
                 // Data set may be listed, but has not yet been crawled, but status should have caught this above
                 // Some URL filtering still has to be done for the 2D FMRC that slip through the data set history attribute check for "FMRC 2D Dataset" and "FMRC Best Dataset".
                     if ( (  good == null ) ) {
-                        errors.addMessage("Data set "+ leafNodeReference.getUrl()+" was scanned, but no variables CF were found.");
+                        errors.addMessage("Data set "+ leafNodeReference.getUrl()+" was scanned, but no CF compliant variables were found.");
                         if ( bad != null && bad.size() > 0 ) {    
                             rubric.addBadLeaves(1);
                             for (Iterator iterator = bad.iterator(); iterator.hasNext();) {
                                 NetCDFVariable netCDFVariable = (NetCDFVariable) iterator.next();
                                 errors.addMessage("In data set "+ dataset.getUrl()+"\n\tvariable "+netCDFVariable.getName()+" has the following error\n\t"+netCDFVariable.getError());
                             }
-                        } 
-                        rubric.addBadLeaves(1);
+                        } else {
+                            rubric.addBadLeaves(1);
+                        }
                     } else if (good != null &&  good.size() == 0 ) {
-                        errors.addMessage("Data set "+ leafNodeReference.getUrl()+" was scanned, but no variables CF were found.");
+                        errors.addMessage("Data set "+ leafNodeReference.getUrl()+" was scanned, but no CF compliant variables were found.");
                         if ( bad != null && bad.size() > 0 ) {    
                             rubric.addBadLeaves(1);
                             for (Iterator iterator = bad.iterator(); iterator.hasNext();) {
                                 NetCDFVariable netCDFVariable = (NetCDFVariable) iterator.next();
                                 errors.addMessage("In data set "+ dataset.getUrl()+"\n\tvariable "+netCDFVariable.getName()+" has the following error\n\t"+netCDFVariable.getError());
                             }
-                        } 
-                        rubric.addBadLeaves(1);
+                        } else {
+                            rubric.addBadLeaves(1);
+                        }
                     } 
                     if ( bad != null && bad.size() > 0 ) {    
-                        rubric.addBadLeaves(1);
                         for (Iterator iterator = bad.iterator(); iterator.hasNext();) {
                             NetCDFVariable netCDFVariable = (NetCDFVariable) iterator.next();
                             errors.addMessage("In data set "+ dataset.getUrl()+"\n\tvariable "+netCDFVariable.getName()+" has the following error\n\t"+netCDFVariable.getError());
@@ -991,6 +997,10 @@ public class Clean implements Callable<String> {
                             datasetGroups.put(key, datasets);
                         }
                         datasets.add(new Leaf(leafNodeReference, dataset));
+                    } else {
+                        // Count FMRC data as bad.
+                        errors.addMessage("Data set "+ leafNodeReference.getUrl()+" looks to be a 2D FMRC.  We aren't including those for now.");
+                        rubric.addBadLeaves(1);
                     }
 
                 
@@ -1002,9 +1012,10 @@ public class Clean implements Callable<String> {
                         errors.addMessage("In data set "+ dataset.getUrl()+"\n\tvariable "+netCDFVariable.getName()+" has the following error\n\t"+netCDFVariable.getError());
                     }
                 } else {
-                    errors.addMessage("Data set "+ leafNodeReference.getUrl()+" was scanned, but no variables CF were found.");
+                    errors.addMessage("Data set "+ leafNodeReference.getUrl()+" was scanned, but no CF compliant variables were found.");
+                    rubric.addBadLeaves(1);
                 }
-                rubric.addBadLeaves(1);
+                
             }
         }
 
@@ -1216,6 +1227,8 @@ public class Clean implements Callable<String> {
             int i = 0;
             double firstTimeMin = 9999999999.d;
             double firstTimeMax = -9999999999.d;
+            double min = 9999999999.d;
+            double max = -9999999999.d;
             for ( Iterator dsIt = datasets.iterator(); dsIt.hasNext(); ) {
                 Leaf leaf = (Leaf) dsIt.next();
                 LeafDataset dataset = leaf.getLeafDataset();
@@ -1229,8 +1242,8 @@ public class Clean implements Callable<String> {
                             firstTimeMax = t.getMaxValue();
 
                         } else {
-                            double min = t.getMinValue();
-                            double max = t.getMaxValue();
+                            min = t.getMinValue();
+                            max = t.getMaxValue();
 
                             if ( min > firstTimeMax || max < firstTimeMin ) {
                                 return false;
@@ -1238,6 +1251,8 @@ public class Clean implements Callable<String> {
                         }
                     }
                 }
+                firstTimeMax = Math.max(firstTimeMax, max);
+                firstTimeMin = Math.min(firstTimeMin, min);
                 i++;
             }
             return true;   

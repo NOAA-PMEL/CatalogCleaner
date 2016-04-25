@@ -30,19 +30,26 @@ public class Rubric {
     private int leaves = 0;
     private int badLeaves = 0;
     private int aggregated = 0;
+    private int skip = 0;
     private int totalServices = 6;
-    private int services;
+    private int services = 0;
     private int fast;
     private int medium;
     private int slow;
     private String errorFile = null;
     private List<String> children = new ArrayList<String>();
     private List<String> missingServices = new ArrayList<String>();
-   
+    private String cleanURL;
 
     public static long SLOW = 30000l;
     public static long MEDIUM = 2500l; 
     
+    public String getCleanURL() {
+        return cleanURL;
+    }
+    public void setCleanURL(String cleanURL) {
+        this.cleanURL = cleanURL;
+    }
     public List<String> getChildren() {
         return children;
     }
@@ -141,6 +148,15 @@ public class Rubric {
     }
     public void addAggregated(int add) {
         aggregated = aggregated + add;
+    }
+    public int getSkip() {
+        return skip;
+    }
+    public void setSkip(int skip) {
+        this.skip = skip;
+    }
+    public void addSkip(int add) {
+        this.skip = this.skip + add;
     }
     public void addLeaves(int add) {
         leaves = leaves + add;

@@ -81,6 +81,17 @@ public class Crawler {
         }
         return false;
     }
+    public static boolean skipRegex(String url) {
+        for ( int i = 0; i < exclude.size(); i++ ) {
+            if ( Pattern.matches(exclude.get(i), url)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    public static boolean skipRegex(CatalogReference ref) {
+        return skipRegex(ref.getUrl());
+    }
     public static boolean skip(CatalogReference ref) {
         return skip(ref.getUrl());
     }

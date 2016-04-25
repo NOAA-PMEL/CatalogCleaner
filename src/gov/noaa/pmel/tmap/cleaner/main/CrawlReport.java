@@ -121,12 +121,16 @@ public class CrawlReport extends Crawler {
                 } else {
                     System.out.println("\t0 sub-catalogs.");
                 }
+                boolean rerun = false;
                 for(int v = 0; v < vchecks.size(); v++) {
                     if ( !vchecks.get(v).equals("") ) {
                         System.out.println("\t"+vchecks.get(v));
+                        rerun = true;
                     }
                 }
-
+                if ( varcheck && rerun ) {
+                    System.out.println("To rerun this catalog: "+" -r "+catalog.getParent()+" -u "+catalog.getUrl());
+                }
                 count = count + leaves.size();
                 if ( full ) {
                     for ( Iterator leafIt = leaves.iterator(); leafIt.hasNext(); ) {
@@ -282,10 +286,15 @@ public class CrawlReport extends Crawler {
                                 System.out.println("\t\tCatalog Reference: "+aSubRef.getUrl());
                             }
                         }
+                        boolean rerun = false;
                         for(int v = 0; v < vchecks.size(); v++) {
                             if ( !vchecks.get(v).equals("") ) {
                                 System.out.println("\t"+blanks+vchecks.get(v));
+                                rerun = true;
                             }
+                        }
+                        if ( varcheck && rerun ) {
+                            System.out.println("To rerun this catalog: "+" -r "+sub.getParent()+" -u "+sub.getUrl());
                         }
                     }
                     total = report(total, level, sub.getUrl(), sub.getCatalogRefs());

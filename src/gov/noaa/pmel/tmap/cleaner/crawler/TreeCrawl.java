@@ -7,6 +7,7 @@ import gov.noaa.pmel.tmap.cleaner.jdo.CatalogXML;
 import gov.noaa.pmel.tmap.cleaner.jdo.LeafNodeReference;
 import gov.noaa.pmel.tmap.cleaner.jdo.LeafNodeReference.DataCrawlStatus;
 import gov.noaa.pmel.tmap.cleaner.jdo.PersistenceHelper;
+import gov.noaa.pmel.tmap.cleaner.main.Crawler;
 import gov.noaa.pmel.tmap.cleaner.util.Util;
 import gov.noaa.pmel.tmap.cleaner.xml.JDOMUtils;
 
@@ -42,6 +43,8 @@ public class TreeCrawl implements Callable<TreeCrawlResult> {
     private CatalogXML catalogXML;
     private PersistenceHelper helper;
     
+    private static int timeout = 5*60; // units of seconds.
+    
     public TreeCrawl(PersistenceHelper helper, String parent, String url, boolean force) {   
         this.helper = helper;
         this.parent = parent;
@@ -64,7 +67,7 @@ public class TreeCrawl implements Callable<TreeCrawlResult> {
             System.out.println("Downloading "+url+" in thread "+Thread.currentThread().getId());
             ByteArrayOutputStream stream = new ByteArrayOutputStream();
             try {
-                proxy.executeGetMethodAndStreamResult(url, stream);
+                proxy.executeGetMethodAndStreamResult(url, stream, timeout);
             } catch ( Exception e ) {
                 System.err.println("Failed to read "+url+" in thread "+Thread.currentThread().getId());
                 System.out.println("Commit transaction after read error in "+Thread.currentThread().getId());
@@ -117,6 +120,12 @@ public class TreeCrawl implements Callable<TreeCrawlResult> {
             }
             catalog.setHasBestTimeSeries(false);
             accessDatasets = findAccessDatasets(url, doc, accessDatasets);
+            if ( Crawler.skip(catalog.getUrl() ) ) {
+                for (Iterator dsIt = accessDatasets.iterator(); dsIt.hasNext();) {
+                    LeafNodeReference leafNodeReference = (LeafNodeReference) dsIt.next();
+                    leafNodeReference.setDataCrawlStatus(DataCrawlStatus.DO_NOT_CRAWL);
+                }
+            }
             catalog.setLeafNodes(accessDatasets);
             if ( catalog.hasBestTimeSeries() ) {
                 catalog.setCatalogRefs(new ArrayList<CatalogReference>());

@@ -32,8 +32,6 @@ import org.apache.commons.cli.ParseException;
 import org.datanucleus.api.jdo.JDOPersistenceManagerFactory;
 import org.joda.time.DateTime;
 
-import visad.data.netcdf.NetCDF;
-
 public class Dumper {
     private static String parent;
     private static String url;

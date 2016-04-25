@@ -113,5 +113,13 @@ public class PersistenceHelper {
     public Transaction getTransaction() {
         return persistenceManager.currentTransaction();
     }
+    public List<Catalog> getCatalogThatContainsDataset(String leafurl) {
+        
+        Query query = persistenceManager.newQuery("javax.jdo.query.SQL", "SELECT * from catalog,leafnodereference where leafnodes_catalog_id_oid=catalog_id and leafnodereference.url='"+leafurl+"'");
+        query.setClass(Catalog.class);
+        List<Catalog> result = (List<Catalog>) query.execute();
+        return result;
+        
+    }
    
 }

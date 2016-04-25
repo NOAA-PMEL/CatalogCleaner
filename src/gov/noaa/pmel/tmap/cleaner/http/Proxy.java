@@ -22,10 +22,10 @@ import org.apache.commons.httpclient.params.HttpMethodParams;
 
 public class Proxy {
 	private int streamBufferSize = 8196;
-	public void executeGetMethodAndSaveResult(String url, File outfile) throws IOException, HttpException {
+	public void executeGetMethodAndSaveResult(String url, File outfile, int timeout) throws IOException, HttpException {
 		HttpClient client = new HttpClient();
 		HttpClientParams params = client.getParams();
-		params.setParameter(HttpClientParams.SO_TIMEOUT, 400000);
+		params.setSoTimeout(timeout*1000);
 		params.setParameter(HttpClientParams.ALLOW_CIRCULAR_REDIRECTS,Boolean.TRUE);
 		client.setParams(params);
 		GetMethod method = new GetMethod(url);
@@ -47,11 +47,11 @@ public class Proxy {
 		}
 
 	}
-	public String executeGetMethodAndReturnResult(String url) throws IOException, HttpException {
+	public String executeGetMethodAndReturnResult(String url, int timeout) throws IOException, HttpException {
 		
 		HttpClient client = new HttpClient();
 		HttpClientParams params = client.getParams();
-		params.setParameter(HttpClientParams.SO_TIMEOUT, 400000);
+		params.setSoTimeout(timeout*1000);
 		params.setParameter(HttpClientParams.ALLOW_CIRCULAR_REDIRECTS,Boolean.TRUE);
 		client.setParams(params);
         GetMethod method = new GetMethod(url);
@@ -83,13 +83,13 @@ public class Proxy {
 	 * @throws IOException
 	 * @throws HttpException
 	 */
-	public void executeGetMethodAndStreamResult(String request, OutputStream output) throws Exception {
+	public void executeGetMethodAndStreamResult(String request, OutputStream output, int timeout) throws Exception {
 
 		HttpClient client = new HttpClient();
 
 		GetMethod method = new GetMethod(request);
 		HttpClientParams params = client.getParams();
-		params.setParameter(HttpClientParams.SO_TIMEOUT, 30000);
+		params.setSoTimeout(timeout*1000);
 		params.setParameter(HttpClientParams.ALLOW_CIRCULAR_REDIRECTS,Boolean.TRUE);
 		client.setParams(params);
 		method.getParams().setParameter(HttpMethodParams.RETRY_HANDLER, new DefaultHttpMethodRetryHandler(3, false));
