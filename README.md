@@ -15,4 +15,4 @@ by allowing users to immediately begin exploring actual data.
 
 ## License
 
-MIT
+Public Domain
